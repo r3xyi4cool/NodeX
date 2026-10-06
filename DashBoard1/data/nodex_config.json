@@ -1,0 +1,19 @@
+{
+  "grace_period_seconds": 15,
+  "rssi_threshold": -75,
+  "rssi_window_size": 5,
+  "heartbeat_interval_seconds": 30,
+  "ui_port": 7878,
+  "enable_location": false,
+  "paired_device_address": null,
+  "paired_device_name": null,
+  "paired_device_firmware": null,
+  "laptop_id": null,
+  "arm_pin_hash": null,
+  "mock_ble": true,
+  "telegram_chat_id": null,
+  "camera_enabled": true,
+  "camera_interval_seconds": 30,
+  "camera_max_photos": 20,
+  "camera_current_slot": 6
+}

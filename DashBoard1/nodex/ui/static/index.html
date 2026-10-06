@@ -1,0 +1,1206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>NodeX — Device Dashboard</title>
+  <meta name="description" content="NodeX BLE proximity security system — real-time device and connection dashboard"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <style>
+    /* ── Design Tokens ─────────────────────────────────────────────── */
+    :root {
+      --bg-base:    #0a0f1e;
+      --bg-card:    #111827;
+      --bg-card2:   #1a2235;
+      --border:     rgba(99,179,237,.12);
+      --border-glow:rgba(99,179,237,.35);
+
+      --text-primary:   #e2e8f0;
+      --text-secondary: #94a3b8;
+      --text-dim:       #4a5568;
+
+      --cyan:   #22d3ee;
+      --green:  #4ade80;
+      --amber:  #fbbf24;
+      --orange: #fb923c;
+      --red:    #f87171;
+      --purple: #a78bfa;
+
+      --state-disarmed:  #4a5568;
+      --state-armed:     #4ade80;
+      --state-ble-lost:  #fb923c;
+      --state-grace:     #fbbf24;
+      --state-event:     #f87171;
+      --state-locked:    #ef4444;
+      --state-recovered: #34d399;
+
+      --font-ui:   'Inter', system-ui, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+
+      --radius-sm: 6px;
+      --radius-md: 12px;
+      --radius-lg: 18px;
+
+      --shadow-card: 0 4px 24px rgba(0,0,0,.4);
+      --glow-cyan:   0 0 20px rgba(34,211,238,.2);
+      --glow-green:  0 0 20px rgba(74,222,128,.25);
+      --glow-red:    0 0 20px rgba(248,113,113,.3);
+    }
+
+    /* ── Reset ─────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 15px; }
+    body {
+      font-family: var(--font-ui);
+      background: var(--bg-base);
+      color: var(--text-primary);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Animated background grid ──────────────────────────────────── */
+    body::before {
+      content: '';
+      position: fixed; inset: 0; z-index: 0;
+      background:
+        linear-gradient(rgba(34,211,238,.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(34,211,238,.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+    }
+
+    /* ── Layout ─────────────────────────────────────────────────────── */
+    .page { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; padding: 20px 24px 40px; }
+
+    /* ── Header ─────────────────────────────────────────────────────── */
+    .header {
+      display: flex; align-items: center; gap: 16px;
+      padding: 16px 24px;
+      background: rgba(17,24,39,.8);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      backdrop-filter: blur(12px);
+      margin-bottom: 20px;
+    }
+    .header-logo { font-size: 22px; font-weight: 700; letter-spacing: -.5px; }
+    .header-logo span { color: var(--cyan); }
+    .header-sub { color: var(--text-secondary); font-size: .8rem; font-family: var(--font-mono); }
+    .header-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+    .conn-indicator {
+      display: flex; align-items: center; gap: 6px;
+      font-size: .75rem; font-family: var(--font-mono); color: var(--text-secondary);
+    }
+    .conn-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--text-dim);
+      transition: background .3s;
+    }
+    .conn-dot.live { background: var(--green); box-shadow: 0 0 8px var(--green); animation: pulse 2s infinite; }
+
+    /* ── Status Bar ─────────────────────────────────────────────────── */
+    .status-bar {
+      display: flex; flex-wrap: wrap; gap: 2px;
+      background: rgba(17,24,39,.9);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 0;
+      margin-bottom: 20px;
+      overflow: hidden;
+      font-family: var(--font-mono);
+      font-size: .75rem;
+    }
+    .sb-item {
+      flex: 1; min-width: 140px;
+      display: flex; flex-direction: column; gap: 3px;
+      padding: 12px 18px;
+      border-right: 1px solid var(--border);
+      transition: background .2s;
+    }
+    .sb-item:last-child { border-right: none; }
+    .sb-item:hover { background: rgba(99,179,237,.04); }
+    .sb-label { color: var(--text-dim); font-size: .65rem; text-transform: uppercase; letter-spacing: .08em; }
+    .sb-value {
+      color: var(--text-primary);
+      font-weight: 600;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .sb-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    /* ── Main grid ──────────────────────────────────────────────────── */
+    .main-grid {
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      grid-template-rows: auto auto;
+      gap: 16px;
+    }
+    @media (max-width: 900px) { .main-grid { grid-template-columns: 1fr; } }
+
+    /* ── Cards ──────────────────────────────────────────────────────── */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-card);
+      overflow: hidden;
+      transition: border-color .3s;
+    }
+    .card:hover { border-color: var(--border-glow); }
+    .card-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .card-title { font-size: .8rem; font-weight: 600; text-transform: uppercase; letter-spacing: .1em; color: var(--text-secondary); }
+    .card-body { padding: 20px; }
+
+    /* ── Security state card ─────────────────────────────────────────── */
+    .state-card {
+      grid-row: span 2;
+      display: flex; flex-direction: column;
+    }
+    .state-display {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 32px 20px 24px;
+      position: relative;
+    }
+    .state-ring {
+      width: 140px; height: 140px;
+      border-radius: 50%;
+      border: 3px solid var(--state-disarmed);
+      display: flex; align-items: center; justify-content: center;
+      position: relative;
+      transition: border-color .4s, box-shadow .4s;
+      margin-bottom: 20px;
+    }
+    .state-ring::before {
+      content: '';
+      position: absolute; inset: -8px;
+      border-radius: 50%;
+      border: 1px solid transparent;
+      transition: border-color .4s;
+    }
+    .state-ring-inner {
+      width: 110px; height: 110px; border-radius: 50%;
+      background: var(--bg-card2);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 4px;
+    }
+    .state-icon { font-size: 32px; line-height: 1; }
+    .state-name {
+      font-family: var(--font-mono);
+      font-size: .65rem; font-weight: 600;
+      text-transform: uppercase; letter-spacing: .1em;
+      color: var(--text-secondary);
+      transition: color .3s;
+    }
+
+    /* Dynamic state colors */
+    body.s-armed    .state-ring { border-color: var(--state-armed);   box-shadow: 0 0 30px rgba(74,222,128,.3); }
+    body.s-armed    .state-name { color: var(--state-armed); }
+    body.s-armed    .sb-dot.mode-dot { background: var(--state-armed); }
+    body.s-ble-lost .state-ring { border-color: var(--state-ble-lost); box-shadow: 0 0 30px rgba(251,146,60,.3); }
+    body.s-ble-lost .state-name { color: var(--state-ble-lost); }
+    body.s-grace    .state-ring { border-color: var(--state-grace);    box-shadow: 0 0 30px rgba(251,191,36,.4); animation: ring-pulse 1s infinite; }
+    body.s-grace    .state-name { color: var(--state-grace); }
+    body.s-event    .state-ring { border-color: var(--state-event);    box-shadow: 0 0 40px rgba(248,113,113,.5); }
+    body.s-locked   .state-ring { border-color: var(--state-locked);   box-shadow: 0 0 40px rgba(239,68,68,.5); animation: ring-pulse .7s infinite; }
+    body.s-locked   .state-name { color: var(--state-locked); }
+
+    /* Grace countdown */
+    .grace-bar-wrap { width: 100%; padding: 0 20px 16px; display: none; }
+    body.s-grace .grace-bar-wrap { display: block; }
+    .grace-label { font-family: var(--font-mono); font-size: .7rem; color: var(--amber); margin-bottom: 6px; display: flex; justify-content: space-between; }
+    .grace-bar-bg { height: 4px; background: rgba(251,191,36,.15); border-radius: 2px; overflow: hidden; }
+    .grace-bar { height: 100%; background: var(--amber); border-radius: 2px; transition: width .9s linear; }
+
+    /* Controls */
+    .controls { padding: 0 20px 20px; display: flex; flex-direction: column; gap: 10px; }
+    .btn {
+      width: 100%;
+      padding: 12px 18px;
+      border-radius: var(--radius-md);
+      border: 1px solid transparent;
+      font-family: var(--font-ui);
+      font-size: .85rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      transition: all .2s;
+      letter-spacing: .02em;
+    }
+    .btn:active { transform: scale(.98); }
+    .btn-arm   { background: rgba(74,222,128,.1); color: var(--green);  border-color: rgba(74,222,128,.3); }
+    .btn-arm:hover   { background: rgba(74,222,128,.2); border-color: var(--green); box-shadow: 0 0 16px rgba(74,222,128,.25); }
+    .btn-disarm{ background: rgba(248,113,113,.1); color: var(--red);   border-color: rgba(248,113,113,.3); }
+    .btn-disarm:hover{ background: rgba(248,113,113,.2); border-color: var(--red); box-shadow: 0 0 16px rgba(248,113,113,.25); }
+    .btn-test  { background: rgba(167,139,250,.1); color: var(--purple);border-color: rgba(167,139,250,.3); }
+    .btn-test:hover  { background: rgba(167,139,250,.2); border-color: var(--purple); }
+    .btn-scan  { background: rgba(34,211,238,.08); color: var(--cyan);  border-color: rgba(34,211,238,.25); }
+    .btn-scan:hover  { background: rgba(34,211,238,.18); border-color: var(--cyan); }
+    .btn-save  { background: rgba(34,211,238,.08); color: var(--cyan);  border-color: rgba(34,211,238,.25); }
+    .btn-save:hover  { background: rgba(34,211,238,.18); border-color: var(--cyan); }
+    .btn:disabled { opacity: .35; cursor: not-allowed; pointer-events: none; }
+
+    /* PIN input */
+    .pin-row { display: flex; gap: 8px; align-items: center; }
+    .pin-input {
+      flex: 1; padding: 10px 14px;
+      background: var(--bg-card2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      font-size: .85rem;
+      outline: none;
+      transition: border-color .2s;
+    }
+    .pin-input:focus { border-color: var(--cyan); }
+
+    /* ── RSSI gauge ─────────────────────────────────────────────────── */
+    .rssi-gauge { display: flex; align-items: center; gap: 16px; padding: 0 0 16px; }
+    .rssi-value {
+      font-family: var(--font-mono); font-size: 2.2rem; font-weight: 700;
+      color: var(--cyan); line-height: 1;
+    }
+    .rssi-unit { font-size: .8rem; color: var(--text-secondary); }
+    .rssi-bars { display: flex; align-items: flex-end; gap: 3px; height: 32px; }
+    .rssi-bar { width: 6px; border-radius: 3px 3px 0 0; background: var(--text-dim); transition: background .3s, height .3s; }
+
+    /* ── Device info grid ───────────────────────────────────────────── */
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .info-item {
+      background: var(--bg-card2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 10px 14px;
+    }
+    .info-item-label { font-size: .65rem; text-transform: uppercase; letter-spacing: .08em; color: var(--text-dim); margin-bottom: 4px; }
+    .info-item-value { font-family: var(--font-mono); font-size: .82rem; color: var(--text-primary); word-break: break-all; }
+
+    /* ── Battery ────────────────────────────────────────────────────── */
+    .battery-row { display: flex; align-items: center; gap: 12px; }
+    .battery-icon {
+      position: relative; width: 40px; height: 22px;
+      border: 2px solid var(--text-dim); border-radius: 4px;
+    }
+    .battery-icon::after { content: ''; position: absolute; right: -6px; top: 50%; transform: translateY(-50%); width: 4px; height: 10px; background: var(--text-dim); border-radius: 0 2px 2px 0; }
+    .battery-fill { position: absolute; inset: 2px; border-radius: 2px; background: var(--green); transition: width .5s; }
+    .battery-pct { font-family: var(--font-mono); font-size: 1.1rem; font-weight: 600; }
+    .battery-state { font-size: .75rem; color: var(--text-secondary); }
+
+    /* ── Event log ──────────────────────────────────────────────────── */
+    .log-panel {
+      grid-column: 1 / -1;
+    }
+    .event-log {
+      height: 200px;
+      overflow-y: auto;
+      font-family: var(--font-mono);
+      font-size: .75rem;
+      display: flex; flex-direction: column; gap: 4px;
+      padding-right: 4px;
+    }
+    .event-log::-webkit-scrollbar { width: 4px; }
+    .event-log::-webkit-scrollbar-track { background: transparent; }
+    .event-log::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    .log-entry {
+      display: flex; gap: 10px; align-items: flex-start;
+      padding: 6px 10px; border-radius: 6px;
+      background: rgba(26,34,53,.6);
+      border-left: 3px solid var(--text-dim);
+      animation: slideIn .2s ease-out;
+    }
+    .log-entry.ev-armed      { border-color: var(--green); }
+    .log-entry.ev-disarmed   { border-color: var(--text-dim); }
+    .log-entry.ev-ble_lost   { border-color: var(--orange); }
+    .log-entry.ev-grace      { border-color: var(--amber); }
+    .log-entry.ev-security   { border-color: var(--red); background: rgba(239,68,68,.08); }
+    .log-entry.ev-recovered  { border-color: var(--green); }
+    .log-entry.ev-test       { border-color: var(--purple); }
+    .log-entry.ev-heartbeat  { border-color: var(--text-dim); opacity: .5; }
+    .log-time  { color: var(--text-dim); flex-shrink: 0; }
+    .log-type  { color: var(--cyan); font-weight: 600; flex-shrink: 0; min-width: 100px; }
+    .log-msg   { color: var(--text-secondary); }
+
+    /* ── Settings panel ─────────────────────────────────────────────── */
+    .settings-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+    .setting-group { display: flex; flex-direction: column; gap: 6px; }
+    .setting-label { font-size: .7rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .06em; }
+    .setting-input {
+      padding: 9px 13px;
+      background: var(--bg-card2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      font-family: var(--font-mono); font-size: .85rem;
+      width: 120px; outline: none;
+      transition: border-color .2s;
+    }
+    .setting-input:focus { border-color: var(--cyan); }
+    .toggle-wrap { display: flex; align-items: center; gap: 8px; }
+    .toggle { position: relative; width: 40px; height: 22px; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider {
+      position: absolute; inset: 0;
+      background: var(--bg-card2); border: 1px solid var(--border);
+      border-radius: 11px; cursor: pointer; transition: .25s;
+    }
+    .toggle-slider::after {
+      content: ''; position: absolute;
+      width: 16px; height: 16px; border-radius: 50%;
+      left: 2px; top: 2px;
+      background: var(--text-dim); transition: .25s;
+    }
+    .toggle input:checked + .toggle-slider { border-color: var(--cyan); background: rgba(34,211,238,.15); }
+    .toggle input:checked + .toggle-slider::after { transform: translateX(18px); background: var(--cyan); }
+
+    /* ── Pair panel ─────────────────────────────────────────────────── */
+    .device-list { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; max-height: 200px; overflow-y: auto; }
+    .device-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 14px;
+      background: var(--bg-card2); border: 1px solid var(--border); border-radius: var(--radius-sm);
+      cursor: pointer; transition: all .2s;
+    }
+    .device-item:hover { border-color: var(--cyan); background: rgba(34,211,238,.06); }
+    .device-item.selected { border-color: var(--cyan); background: rgba(34,211,238,.1); }
+    .device-addr { font-family: var(--font-mono); font-size: .72rem; color: var(--text-secondary); }
+    .device-rssi { margin-left: auto; font-family: var(--font-mono); font-size: .75rem; color: var(--cyan); }
+    .device-name { font-size: .85rem; font-weight: 500; }
+
+    /* ── Sync status ─────────────────────────────────────────────────── */
+    .sync-row {
+      display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+      font-family: var(--font-mono); font-size: .75rem;
+    }
+    .sync-badge {
+      padding: 3px 10px; border-radius: 20px;
+      font-size: .7rem; font-weight: 600;
+      background: rgba(34,211,238,.1); color: var(--cyan);
+      border: 1px solid rgba(34,211,238,.25);
+    }
+
+    /* ── Animations ─────────────────────────────────────────────────── */
+    @keyframes pulse {
+      0%,100% { box-shadow: 0 0 6px currentColor; }
+      50%      { box-shadow: 0 0 14px currentColor; }
+    }
+    @keyframes ring-pulse {
+      0%,100% { box-shadow: 0 0 20px rgba(251,191,36,.3); }
+      50%      { box-shadow: 0 0 50px rgba(251,191,36,.6); }
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-4px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes blink { 50% { opacity: .4; } }
+
+    .blink { animation: blink 1s infinite; }
+
+    /* ── Modal (PIN prompt) ─────────────────────────────────────────── */
+    .modal-bg {
+      position: fixed; inset: 0; z-index: 100;
+      background: rgba(0,0,0,.7); backdrop-filter: blur(6px);
+      display: none; align-items: center; justify-content: center;
+    }
+    .modal-bg.open { display: flex; }
+    .modal {
+      background: var(--bg-card); border: 1px solid var(--border-glow);
+      border-radius: var(--radius-lg); padding: 28px 32px;
+      min-width: 300px; box-shadow: 0 8px 40px rgba(0,0,0,.6);
+    }
+    .modal h3 { font-size: 1rem; margin-bottom: 16px; }
+    .modal-actions { display: flex; gap: 10px; margin-top: 16px; }
+    .modal-actions .btn { flex: 1; }
+    .btn-cancel { background: rgba(255,255,255,.05); color: var(--text-secondary); border-color: var(--border); }
+
+    /* ── Tooltip ────────────────────────────────────────────────────── */
+    [data-tip] { position: relative; }
+    [data-tip]::after {
+      content: attr(data-tip);
+      position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+      background: #1e293b; border: 1px solid var(--border);
+      color: var(--text-secondary); font-size: .7rem; white-space: nowrap;
+      padding: 4px 10px; border-radius: 6px; pointer-events: none;
+      opacity: 0; transition: opacity .15s;
+    }
+    [data-tip]:hover::after { opacity: 1; }
+
+    /* ── Toast ──────────────────────────────────────────────────────── */
+    #toast {
+      position: fixed; bottom: 24px; right: 24px; z-index: 200;
+      background: var(--bg-card2); border: 1px solid var(--border);
+      border-radius: var(--radius-md); padding: 12px 20px;
+      font-size: .82rem; color: var(--text-primary);
+      transform: translateY(20px); opacity: 0;
+      transition: all .3s; pointer-events: none;
+      max-width: 320px;
+    }
+    #toast.show { transform: translateY(0); opacity: 1; }
+    #toast.success { border-color: rgba(74,222,128,.4); }
+    #toast.error   { border-color: rgba(248,113,113,.4); }
+  </style>
+</head>
+<body class="s-disarmed">
+
+<!-- PIN Modal -->
+<div class="modal-bg" id="pinModal">
+  <div class="modal">
+    <h3 id="pinModalTitle">🔐 Enter PIN</h3>
+    <input type="password" class="pin-input" id="pinModalInput" placeholder="PIN (leave blank if none)" style="width:100%"/>
+    <div class="modal-actions">
+      <button class="btn btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-arm" id="pinModalConfirm" onclick="confirmModal()">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<div class="page">
+
+  <!-- ── Header ── -->
+  <header class="header">
+    <div>
+      <div class="header-logo">Node<span>X</span></div>
+      <div class="header-sub">BLE Proximity Security System — Dashboard 1</div>
+    </div>
+    <div class="header-right">
+      <div class="conn-indicator">
+        <div class="conn-dot" id="wsDot"></div>
+        <span id="wsLabel">Connecting…</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── Status bar ── -->
+  <div class="status-bar" id="statusBar">
+    <div class="sb-item">
+      <div class="sb-label">ESP32 Status</div>
+      <div class="sb-value"><div class="sb-dot" id="esp32Dot" style="background:var(--text-dim)"></div><span id="esp32Status">—</span></div>
+    </div>
+    <div class="sb-item">
+      <div class="sb-label">BLE Status</div>
+      <div class="sb-value"><div class="sb-dot" id="bleDot" style="background:var(--text-dim)"></div><span id="bleStatus">—</span></div>
+    </div>
+    <div class="sb-item">
+      <div class="sb-label">Security Mode</div>
+      <div class="sb-value"><div class="sb-dot mode-dot" style="background:var(--text-dim)" id="modeDot"></div><span id="secMode">DISARMED</span></div>
+    </div>
+    <div class="sb-item">
+      <div class="sb-label">Signal</div>
+      <div class="sb-value"><span id="sbRssi">— dBm</span></div>
+    </div>
+    <div class="sb-item">
+      <div class="sb-label">Last Sync</div>
+      <div class="sb-value"><span id="sbSync">—</span></div>
+    </div>
+    <div class="sb-item">
+      <div class="sb-label">Pending</div>
+      <div class="sb-value"><span id="sbPending">0</span></div>
+    </div>
+  </div>
+
+  <!-- ── Main grid ── -->
+  <div class="main-grid">
+
+    <!-- ── Left: Security State Card ── -->
+    <div class="card state-card">
+      <div class="card-header">
+        <span class="card-title">Security State</span>
+        <span id="mockBadge" style="display:none;font-family:var(--font-mono);font-size:.65rem;color:var(--amber);border:1px solid rgba(251,191,36,.3);padding:2px 8px;border-radius:12px;">MOCK</span>
+      </div>
+
+      <div class="state-display">
+        <div class="state-ring" id="stateRing">
+          <div class="state-ring-inner">
+            <div class="state-icon" id="stateIcon">🔓</div>
+            <div class="state-name" id="stateName">DISARMED</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Grace countdown -->
+      <div class="grace-bar-wrap">
+        <div class="grace-label">
+          <span>⏱ Grace Period</span>
+          <span id="graceCountdown">0s</span>
+        </div>
+        <div class="grace-bar-bg">
+          <div class="grace-bar" id="graceBar" style="width:100%"></div>
+        </div>
+      </div>
+
+      <!-- PIN + Controls -->
+      <div class="controls">
+        <div class="pin-row">
+          <input type="password" class="pin-input" id="quickPin" placeholder="PIN (optional)"/>
+          <span style="font-size:.7rem;color:var(--text-dim)" data-tip="Required only if a PIN is set">🔑</span>
+        </div>
+        <button class="btn btn-arm"    id="btnArm"    onclick="doAction('arm')">🛡 Arm System</button>
+        <button class="btn btn-disarm" id="btnDisarm" onclick="doAction('disarm')">🔓 Disarm</button>
+        <button class="btn btn-test"   id="btnTest"   onclick="doAction('test')">⚡ Security Test</button>
+      </div>
+    </div>
+
+    <!-- ── Right top: BLE / ESP32 info ── -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Token & Connection</span>
+      </div>
+      <div class="card-body">
+        <!-- RSSI gauge -->
+        <div class="rssi-gauge">
+          <div>
+            <div class="rssi-value" id="rssiValue">—</div>
+            <div class="rssi-unit">dBm (smoothed)</div>
+          </div>
+          <div class="rssi-bars" id="rssiBars">
+            <div class="rssi-bar" style="height:25%"></div>
+            <div class="rssi-bar" style="height:40%"></div>
+            <div class="rssi-bar" style="height:60%"></div>
+            <div class="rssi-bar" style="height:80%"></div>
+            <div class="rssi-bar" style="height:100%"></div>
+          </div>
+        </div>
+
+        <!-- Device info -->
+        <div class="info-grid">
+          <div class="info-item">
+            <div class="info-item-label">Device Name</div>
+            <div class="info-item-value" id="devName">—</div>
+          </div>
+          <div class="info-item">
+            <div class="info-item-label">Address</div>
+            <div class="info-item-value" id="devAddr">—</div>
+          </div>
+          <div class="info-item">
+            <div class="info-item-label">Firmware</div>
+            <div class="info-item-value" id="devFw">—</div>
+          </div>
+          <div class="info-item">
+            <div class="info-item-label">Token Battery</div>
+            <div class="info-item-value" id="devBat">—</div>
+          </div>
+          <div class="info-item">
+            <div class="info-item-label">RSSI Threshold</div>
+            <div class="info-item-value" id="infoThreshold">—</div>
+          </div>
+          <div class="info-item">
+            <div class="info-item-label">Grace Period</div>
+            <div class="info-item-value" id="infoGrace">—</div>
+          </div>
+        </div>
+
+        <!-- Laptop battery -->
+        <div style="margin-top:16px">
+          <div class="info-item-label" style="margin-bottom:10px">Laptop Battery</div>
+          <div class="battery-row">
+            <div class="battery-icon">
+              <div class="battery-fill" id="batFill" style="width:50%"></div>
+            </div>
+            <div class="battery-pct" id="batPct">—</div>
+            <div class="battery-state" id="batState">—</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Right bottom: Pair + Settings + Sync (tabbed) ── -->
+    <div class="card">
+      <div class="card-header">
+        <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+          <button class="tab-btn active" id="tab-pair"     onclick="switchTab('pair')">Pairing</button>
+          <button class="tab-btn"        id="tab-settings" onclick="switchTab('settings')">Settings</button>
+          <button class="tab-btn"        id="tab-sync"     onclick="switchTab('sync')">Sync</button>
+          <button class="tab-btn"        id="tab-cam"      onclick="switchTab('cam')">📷 Captures</button>
+        </div>
+      </div>
+
+      <!-- Pair tab -->
+      <div class="card-body tab-panel" id="panel-pair">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-scan" id="btnScan" onclick="doScan()" style="flex:1">🔍 Scan for ESP32</button>
+          <div style="font-family:var(--font-mono);font-size:.7rem;color:var(--text-secondary)" id="scanStatus"></div>
+        </div>
+        <div class="device-list" id="deviceList"></div>
+        <div style="margin-top:10px;font-family:var(--font-mono);font-size:.7rem;color:var(--text-dim)" id="pairedInfo"></div>
+      </div>
+
+      <!-- Settings tab -->
+      <div class="card-body tab-panel" id="panel-settings" style="display:none">
+        <div class="settings-row">
+          <div class="setting-group">
+            <div class="setting-label">Grace Period (s)</div>
+            <input type="number" class="setting-input" id="setGrace" min="5" max="300" value="15"/>
+          </div>
+          <div class="setting-group">
+            <div class="setting-label">RSSI Threshold (dBm)</div>
+            <input type="number" class="setting-input" id="setThreshold" min="-100" max="-30" value="-75"/>
+          </div>
+          <div class="setting-group">
+            <div class="setting-label">Set PIN</div>
+            <input type="password" class="setting-input" id="setPin" placeholder="new PIN" style="width:120px"/>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:16px;margin-top:12px;flex-wrap:wrap">
+          <div class="setting-group">
+            <div class="setting-label">Mock BLE Mode</div>
+            <div class="toggle-wrap">
+              <label class="toggle"><input type="checkbox" id="setMock" onchange="toggleMock()"/><span class="toggle-slider"></span></label>
+              <span style="font-size:.75rem;color:var(--text-secondary)" id="mockLabel">Off</span>
+            </div>
+          </div>
+          <div class="setting-group">
+            <div class="setting-label">Enable Location</div>
+            <div class="toggle-wrap">
+              <label class="toggle"><input type="checkbox" id="setLocation"/><span class="toggle-slider"></span></label>
+              <span style="font-size:.75rem;color:var(--text-secondary)">City-level, opt-in</span>
+            </div>
+          </div>
+          <div class="setting-group">
+            <div class="setting-label">Telegram Chat ID</div>
+            <input type="text" class="setting-input" id="setTelegram" placeholder="chat id" style="width:140px"/>
+          </div>
+          <div class="setting-group">
+            <div class="setting-label">Camera Surveillance</div>
+            <div class="toggle-wrap">
+              <label class="toggle"><input type="checkbox" id="setCamera" checked/><span class="toggle-slider"></span></label>
+              <span style="font-size:.75rem;color:var(--text-secondary)">Every 30s</span>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:16px">
+          <button class="btn btn-save" onclick="saveSettings()" style="width:auto;padding:10px 24px">💾 Save Settings</button>
+        </div>
+      </div>
+
+      <!-- Sync tab -->
+      <div class="card-body tab-panel" id="panel-sync" style="display:none">
+        <div class="sync-row">
+          <div>
+            <div class="info-item-label">Pending Queue</div>
+            <div style="font-family:var(--font-mono);font-size:1.4rem;font-weight:700;color:var(--cyan)" id="syncPending">0</div>
+          </div>
+          <div>
+            <div class="info-item-label">Last Successful Sync</div>
+            <div style="font-family:var(--font-mono);font-size:.8rem;color:var(--green)" id="syncLast">—</div>
+          </div>
+          <div>
+            <div class="info-item-label">Last Error</div>
+            <div style="font-family:var(--font-mono);font-size:.75rem;color:var(--red);max-width:250px;overflow:hidden;text-overflow:ellipsis" id="syncError">—</div>
+          </div>
+        </div>
+        <div class="sync-badge" style="margin-top:12px;display:inline-flex;align-items:center;gap:6px" id="syncBadge">
+          <div class="conn-dot" id="syncDot" style="background:var(--text-dim)"></div>
+          <span id="syncBadgeLabel">Unknown</span>
+        </div>
+      </div>
+
+      <!-- Captures tab (20-photo circular buffer) -->
+      <div class="card-body tab-panel" id="panel-cam" style="display:none">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+          <div>
+            <div style="font-weight:600;font-size:.9rem;color:var(--text-primary)">Intruder Captures (20-Photo Buffer)</div>
+            <div style="font-size:.72rem;color:var(--text-secondary)">Takes photo every 30s when Armed/Locked. Overwrites slot 1 after 20.</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <span style="font-family:var(--font-mono);font-size:.75rem;color:var(--cyan);background:rgba(6,182,212,.1);border:1px solid rgba(6,182,212,.2);padding:3px 8px;border-radius:6px">Slot: <span id="camSlotNum">1</span>/20</span>
+            <button class="btn btn-save" style="padding:6px 14px;font-size:.75rem;width:auto" onclick="triggerSnap()">📸 Snap Now</button>
+          </div>
+        </div>
+        <div id="camGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:8px;max-height:220px;overflow-y:auto;padding-right:4px">
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Event Log (full width) ── -->
+    <div class="card log-panel">
+      <div class="card-header">
+        <span class="card-title">Live Event Log</span>
+        <button onclick="clearLog()" style="background:none;border:none;color:var(--text-dim);font-size:.75rem;cursor:pointer">Clear</button>
+      </div>
+      <div class="card-body" style="padding:12px 16px">
+        <div class="event-log" id="eventLog">
+          <div class="log-entry">
+            <span class="log-time">—</span>
+            <span class="log-type">INIT</span>
+            <span class="log-msg">Connecting to NodeX backend…</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /main-grid -->
+</div><!-- /page -->
+
+<style>
+  .tab-btn {
+    background: none; border: none; color: var(--text-secondary);
+    padding: 6px 16px; cursor: pointer; font-size: .78rem; font-family: var(--font-ui);
+    transition: all .2s;
+  }
+  .tab-btn.active { background: rgba(34,211,238,.1); color: var(--cyan); }
+  .tab-btn:hover:not(.active) { color: var(--text-primary); }
+</style>
+
+<script>
+/* ═══════════════════════════════════════════════════════
+   NodeX Dashboard — WebSocket Client
+═══════════════════════════════════════════════════════ */
+
+let ws = null;
+let wsReconnectTimer = null;
+let gracePeriodTotal = 15;
+let pendingAction = null; // { type, resolve }
+
+/* ── WebSocket ── */
+function connectWS() {
+  ws = new WebSocket(`ws://127.0.0.1:${location.port || 7878}/ws`);
+
+  ws.onopen = () => {
+    setWSStatus(true);
+    addLog('CONNECTED', 'WebSocket connected', 'ev-connected');
+    clearTimeout(wsReconnectTimer);
+  };
+
+  ws.onclose = () => {
+    setWSStatus(false);
+    addLog('DISCONNECTED', 'WebSocket lost — reconnecting…', 'ev-ble_lost');
+    wsReconnectTimer = setTimeout(connectWS, 3000);
+  };
+
+  ws.onerror = () => ws.close();
+
+  ws.onmessage = (evt) => {
+    try {
+      const d = JSON.parse(evt.data);
+      handleMessage(d);
+    } catch(e) { console.error('WS parse error', e); }
+  };
+}
+
+function send(obj) {
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
+}
+
+function setWSStatus(live) {
+  document.getElementById('wsDot').className  = 'conn-dot' + (live ? ' live' : '');
+  document.getElementById('wsLabel').textContent = live ? 'Live' : 'Offline';
+}
+
+/* ── Message router ── */
+function handleMessage(d) {
+  if (d.type === 'error') { showToast('⛔ ' + d.detail, 'error'); return; }
+  if (d.type === 'pong') return;
+
+  // All status messages update UI
+  if (d.state) updateState(d);
+  if (d.sync)  updateSync(d.sync);
+  if (d.event_type) addLogFromEvent(d);
+}
+
+/* ── State update ── */
+function updateState(d) {
+  const state = d.state || 'DISARMED';
+  const cssClass = {
+    DISARMED:       's-disarmed',
+    ARMED:          's-armed',
+    BLE_LOST:       's-ble-lost',
+    GRACE_PERIOD:   's-grace',
+    SECURITY_EVENT: 's-event',
+    RECOVERED:      's-armed',
+    LOCKED:         's-locked',
+  }[state] || 's-disarmed';
+
+  const icons = {
+    DISARMED: '🔓', ARMED: '🛡', BLE_LOST: '📡',
+    GRACE_PERIOD: '⏱', SECURITY_EVENT: '🚨', RECOVERED: '✅', LOCKED: '🔒'
+  };
+
+  document.body.className = cssClass;
+  document.getElementById('stateName').textContent = d.state_label || state;
+  document.getElementById('stateIcon').textContent = icons[state] || '❓';
+  document.getElementById('secMode').textContent   = state;
+
+  // Status bar dots
+  const ble = d.ble_connected;
+  setBleStatus(ble);
+  setEsp32Status(ble, d.paired_name);
+
+  // RSSI
+  const rssi = d.rssi_smooth;
+  updateRssi(rssi);
+  document.getElementById('sbRssi').textContent = rssi != null ? rssi.toFixed(1) + ' dBm' : '— dBm';
+
+  // Device info
+  document.getElementById('devName').textContent  = d.paired_name  || '—';
+  document.getElementById('devAddr').textContent  = d.paired_address|| '—';
+  document.getElementById('devFw').textContent    = d.firmware      || '—';
+  document.getElementById('devBat').textContent   = d.esp32_battery != null ? d.esp32_battery + '%' : '—';
+  document.getElementById('infoThreshold').textContent = (d.rssi_threshold || '—') + ' dBm';
+  document.getElementById('infoGrace').textContent     = (d.grace_period || '—') + ' s';
+
+  // Grace bar
+  if (state === 'GRACE_PERIOD' && d.grace_period) {
+    gracePeriodTotal = d.grace_period;
+    const remaining = d.grace_remaining || 0;
+    const pct = (remaining / gracePeriodTotal * 100).toFixed(1);
+    document.getElementById('graceBar').style.width = pct + '%';
+    document.getElementById('graceCountdown').textContent = remaining.toFixed(0) + 's';
+  }
+
+  // Mock badge
+  document.getElementById('mockBadge').style.display = d.mock_ble ? 'inline' : 'none';
+
+  // Mode dot color
+  const dotColors = {
+    DISARMED: 'var(--text-dim)', ARMED: 'var(--green)',
+    BLE_LOST: 'var(--orange)',   GRACE_PERIOD: 'var(--amber)',
+    SECURITY_EVENT: 'var(--red)', LOCKED: 'var(--red)', RECOVERED: 'var(--green)'
+  };
+  document.getElementById('modeDot').style.background = dotColors[state] || 'var(--text-dim)';
+
+  // Sync from full_status
+  if (d.sync) updateSync(d.sync);
+
+  // Settings fields (pre-fill)
+  if (d.type === 'full_status') {
+    document.getElementById('setGrace').value     = d.grace_period     || 15;
+    document.getElementById('setThreshold').value = d.rssi_threshold   || -75;
+    document.getElementById('pairedInfo').textContent = d.paired_address
+      ? `Paired: ${d.paired_name} (${d.paired_address})`
+      : 'No device paired';
+  }
+}
+
+function setBleStatus(connected) {
+  document.getElementById('bleDot').style.background = connected ? 'var(--green)' : 'var(--red)';
+  document.getElementById('bleStatus').textContent   = connected ? 'ACTIVE' : 'LOST';
+}
+
+function setEsp32Status(connected, name) {
+  document.getElementById('esp32Dot').style.background = connected ? 'var(--green)' : 'var(--red)';
+  document.getElementById('esp32Status').textContent   = connected ? (name || 'CONNECTED') : 'DISCONNECTED';
+}
+
+/* ── RSSI Bars ── */
+function updateRssi(rssi) {
+  const el = document.getElementById('rssiValue');
+  el.textContent = rssi != null ? rssi.toFixed(1) : '—';
+
+  // Color
+  if (rssi == null) { el.style.color = 'var(--text-dim)'; }
+  else if (rssi >= -60) { el.style.color = 'var(--green)'; }
+  else if (rssi >= -75) { el.style.color = 'var(--cyan)'; }
+  else if (rssi >= -85) { el.style.color = 'var(--amber)'; }
+  else { el.style.color = 'var(--red)'; }
+
+  // Bars (5 bars from -40 to -100)
+  const bars = document.getElementById('rssiBars').children;
+  const thresholds = [-60, -70, -80, -90, -95];
+  const heights    = ['20%','35%','55%','75%','100%'];
+  for (let i = 0; i < bars.length; i++) {
+    const active = rssi != null && rssi > thresholds[i];
+    bars[i].style.background = active
+      ? (rssi >= -60 ? 'var(--green)' : rssi >= -75 ? 'var(--cyan)' : 'var(--amber)')
+      : 'var(--text-dim)';
+    bars[i].style.height = heights[i];
+  }
+}
+
+/* ── Sync status ── */
+function updateSync(s) {
+  const p = s.pending || 0;
+  document.getElementById('syncPending').textContent = p;
+  document.getElementById('sbPending').textContent   = p;
+  document.getElementById('syncLast').textContent    = s.last_sync ? fmtTime(s.last_sync) : '—';
+  document.getElementById('syncError').textContent   = s.last_error || '—';
+  document.getElementById('sbSync').textContent      = s.last_sync ? fmtTime(s.last_sync) : '—';
+
+  const live = p === 0 && !s.last_error;
+  document.getElementById('syncDot').style.background = live ? 'var(--green)' : (s.last_error ? 'var(--red)' : 'var(--amber)');
+  document.getElementById('syncBadgeLabel').textContent = live ? 'Synced' : (s.last_error ? 'Error' : `${p} pending`);
+}
+
+/* ── Event log ── */
+const MAX_LOG = 100;
+function addLog(type, msg, cssClass = '') {
+  const log = document.getElementById('eventLog');
+  const entry = document.createElement('div');
+  entry.className = 'log-entry ' + cssClass;
+  const now = new Date().toLocaleTimeString('en-GB', { hour12: false });
+  entry.innerHTML = `<span class="log-time">${now}</span><span class="log-type">${type}</span><span class="log-msg">${msg}</span>`;
+  log.insertBefore(entry, log.firstChild);
+  while (log.children.length > MAX_LOG) log.removeChild(log.lastChild);
+}
+
+function addLogFromEvent(d) {
+  const type = d.event_type || d.type || 'EVENT';
+  const cssMap = {
+    ARM: 'ev-armed', DISARM: 'ev-disarmed', BLE_LOST: 'ev-ble_lost',
+    GRACE_STARTED: 'ev-grace', TOKEN_RECOVERED: 'ev-recovered',
+    SECURITY_EVENT: 'ev-security', MANUAL_TEST: 'ev-test',
+    HEARTBEAT: 'ev-heartbeat', CONNECTED: 'ev-armed',
+  };
+  const msgs = {
+    ARM: 'System armed',
+    DISARM: 'System disarmed',
+    BLE_LOST: `BLE signal lost (RSSI: ${d.rssi_smooth ?? '?'} dBm)`,
+    GRACE_STARTED: 'Grace period started',
+    TOKEN_RECOVERED: 'Token recovered — back to ARMED',
+    SECURITY_EVENT: '🚨 SECURITY EVENT — workstation locked!',
+    MANUAL_TEST: 'Manual security test fired',
+    HEARTBEAT: `Heartbeat (battery: ${d.battery_percent ?? '?'}%)`,
+    BLE_RECOVERED_FAST: 'BLE signal recovered',
+  };
+  addLog(type, msgs[type] || JSON.stringify(d).slice(0,80), cssMap[type] || '');
+}
+
+function clearLog() {
+  document.getElementById('eventLog').innerHTML = '';
+}
+
+/* ── Actions ── */
+function doAction(action) {
+  const pin = document.getElementById('quickPin').value || '';
+  send({ action, pin });
+}
+
+/* ── Scanning ── */
+let selectedDevice = null;
+async function doScan() {
+  document.getElementById('scanStatus').textContent = 'Scanning…';
+  document.getElementById('btnScan').disabled = true;
+  document.getElementById('deviceList').innerHTML = '';
+  selectedDevice = null;
+  try {
+    const resp = await fetch('/api/pair/scan', { method: 'POST' });
+    const data = await resp.json();
+    renderDevices(data.devices || []);
+    document.getElementById('scanStatus').textContent = `Found ${data.devices?.length ?? 0} devices`;
+  } catch(e) {
+    document.getElementById('scanStatus').textContent = 'Scan failed';
+    showToast('Scan error: ' + e.message, 'error');
+  }
+  document.getElementById('btnScan').disabled = false;
+}
+
+function renderDevices(devices) {
+  const list = document.getElementById('deviceList');
+  list.innerHTML = '';
+  if (!devices.length) {
+    list.innerHTML = '<div style="color:var(--text-dim);font-size:.8rem;padding:8px">No devices found</div>';
+    return;
+  }
+  devices.forEach(d => {
+    const item = document.createElement('div');
+    item.className = 'device-item';
+    item.innerHTML = `
+      <div>
+        <div class="device-name">${d.name || 'Unknown'}</div>
+        <div class="device-addr">${d.address}</div>
+      </div>
+      <div class="device-rssi">${d.rssi ?? '—'} dBm</div>`;
+    item.onclick = () => {
+      document.querySelectorAll('.device-item').forEach(x => x.classList.remove('selected'));
+      item.classList.add('selected');
+      selectedDevice = d;
+      pairDevice(d);
+    };
+    list.appendChild(item);
+  });
+}
+
+async function pairDevice(d) {
+  try {
+    const resp = await fetch('/api/pair/select', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ address: d.address, name: d.name }),
+    });
+    const result = await resp.json();
+    if (result.ok) {
+      showToast(`✅ Paired with ${d.name}`, 'success');
+      document.getElementById('pairedInfo').textContent = `Paired: ${d.name} (${d.address})`;
+      addLog('PAIR', `Paired with ${d.name} (${d.address})`, 'ev-armed');
+    }
+  } catch(e) { showToast('Pair error: ' + e.message, 'error'); }
+}
+
+/* ── Settings ── */
+async function saveSettings() {
+  const body = {
+    grace_period_seconds: parseInt(document.getElementById('setGrace').value),
+    rssi_threshold:       parseInt(document.getElementById('setThreshold').value),
+    enable_location:      document.getElementById('setLocation').checked,
+    mock_ble:             document.getElementById('setMock').checked,
+    camera_enabled:       document.getElementById('setCamera').checked,
+    telegram_chat_id:     document.getElementById('setTelegram').value || null,
+  };
+  const pin = document.getElementById('setPin').value;
+  if (pin) body.pin = pin;
+
+  try {
+    const resp = await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const result = await resp.json();
+    if (result.ok) {
+      showToast('✅ Settings saved', 'success');
+      addLog('SETTINGS', 'Settings updated', '');
+    }
+  } catch(e) { showToast('Save error: ' + e.message, 'error'); }
+}
+
+function toggleMock() {
+  const on = document.getElementById('setMock').checked;
+  document.getElementById('mockLabel').textContent = on ? 'On (no hardware needed)' : 'Off';
+}
+
+/* ── Captures (20-photo circular buffer) ── */
+async function loadCaptures() {
+  try {
+    const resp = await fetch('/api/captures');
+    const d = await resp.json();
+    const slotEl = document.getElementById('camSlotNum');
+    if (slotEl) slotEl.textContent = d.current_slot || 1;
+    const grid = document.getElementById('camGrid');
+    if (!grid) return;
+    grid.innerHTML = '';
+    const captures = d.captures || [];
+    for (let slot = 1; slot <= (d.max_photos || 20); slot++) {
+      const item = captures.find(c => c.slot === slot);
+      const isCur = (slot === d.current_slot);
+      const div = document.createElement('div');
+      div.style.cssText = `border:1px solid ${isCur ? 'var(--cyan)' : 'var(--border)'};border-radius:6px;overflow:hidden;background:rgba(0,0,0,.3);position:relative;text-align:center;font-size:.65rem`;
+      if (item) {
+        div.innerHTML = `
+          <img src="${item.url}?t=${Date.now()}" style="width:100%;height:60px;object-fit:cover;display:block" onerror="this.style.display='none'"/>
+          <div style="padding:2px 4px;font-family:var(--font-mono);color:${isCur ? 'var(--cyan)' : 'var(--text-secondary)'}">#${slot} ${isCur ? '●' : ''}</div>
+        `;
+      } else {
+        div.innerHTML = `
+          <div style="height:60px;display:flex;align-items:center;justify-content:center;color:var(--text-dim);font-size:1.2rem">📷</div>
+          <div style="padding:2px 4px;font-family:var(--font-mono);color:var(--text-dim)">#${slot}</div>
+        `;
+      }
+      grid.appendChild(div);
+    }
+  } catch(e) { console.debug('Capture load error', e); }
+}
+
+async function triggerSnap() {
+  try {
+    showToast('📸 Taking snapshot…', 'info');
+    const resp = await fetch('/api/captures/snap', { method: 'POST' });
+    const d = await resp.json();
+    if (d.ok) {
+      showToast(`✅ Captured to Slot ${d.slot}/20`, 'success');
+      loadCaptures();
+      addLog('CAMERA', `Captured snapshot in slot ${d.slot}`, '');
+    } else {
+      showToast('Capture error: ' + (d.error || 'Failed'), 'error');
+    }
+  } catch(e) { showToast('Snap error: ' + e.message, 'error'); }
+}
+
+/* ── Tabs ── */
+function switchTab(tab) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.style.display = 'none');
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('panel-' + tab).style.display = '';
+  document.getElementById('tab-' + tab).classList.add('active');
+  if (tab === 'cam') loadCaptures();
+}
+
+/* ── Modal (generic PIN) ── */
+let _modalResolve = null;
+function openModal(title, confirmLabel = 'Confirm') {
+  document.getElementById('pinModalTitle').textContent = title;
+  document.getElementById('pinModalConfirm').textContent = confirmLabel;
+  document.getElementById('pinModalInput').value = '';
+  document.getElementById('pinModal').classList.add('open');
+  document.getElementById('pinModalInput').focus();
+  return new Promise(r => { _modalResolve = r; });
+}
+function closeModal() {
+  document.getElementById('pinModal').classList.remove('open');
+  if (_modalResolve) _modalResolve(null);
+}
+function confirmModal() {
+  const pin = document.getElementById('pinModalInput').value;
+  document.getElementById('pinModal').classList.remove('open');
+  if (_modalResolve) _modalResolve(pin);
+}
+document.getElementById('pinModalInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') confirmModal();
+  if (e.key === 'Escape') closeModal();
+});
+
+/* ── Toast ── */
+let _toastTimer = null;
+function showToast(msg, type = '') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show ' + type;
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.className = '', 3500);
+}
+
+/* ── Battery display ── */
+function updateBattery(pct, charging) {
+  const fill = document.getElementById('batFill');
+  const pctEl = document.getElementById('batPct');
+  const stateEl = document.getElementById('batState');
+  if (pct != null) {
+    fill.style.width = pct + '%';
+    fill.style.background = pct > 20 ? 'var(--green)' : 'var(--red)';
+    pctEl.textContent = pct.toFixed(0) + '%';
+    pctEl.style.color = pct > 20 ? 'var(--text-primary)' : 'var(--red)';
+  }
+  stateEl.textContent = charging ? '⚡ Charging' : 'On battery';
+}
+
+/* ── Utility ── */
+function fmtTime(iso) {
+  try { return new Date(iso).toLocaleTimeString('en-GB', {hour:'2-digit',minute:'2-digit',second:'2-digit'}); }
+  catch { return iso; }
+}
+
+/* ── Periodic battery update ── */
+async function fetchBattery() {
+  try {
+    const resp = await fetch('/api/status');
+    const d = await resp.json();
+    // Status also updates from WS; this is a fallback
+  } catch {}
+}
+
+/* ── Init ── */
+connectWS();
+setInterval(fetchBattery, 10000);
+
+/* Fetch settings on load */
+fetch('/api/settings').then(r => r.json()).then(s => {
+  if (s.grace_period_seconds) document.getElementById('setGrace').value     = s.grace_period_seconds;
+  if (s.rssi_threshold)       document.getElementById('setThreshold').value = s.rssi_threshold;
+  document.getElementById('setLocation').checked = s.enable_location || false;
+  document.getElementById('setMock').checked     = s.mock_ble || false;
+  document.getElementById('setTelegram').value   = s.telegram_chat_id || '';
+  toggleMock();
+}).catch(() => {});
+
+/* Fetch initial sync status */
+fetch('/api/sync/status').then(r => r.json()).then(updateSync).catch(() => {});
+</script>
+</body>
+</html>
