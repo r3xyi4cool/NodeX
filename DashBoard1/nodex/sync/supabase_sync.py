@@ -89,18 +89,29 @@ class SupabaseSync:
             email = settings.nodex_user_email
             password = keyring.get_password(KEYRING_SERVICE, KEYRING_USER_PWD)
             if not email or not password:
+                if settings.mock_ble:
+                    logger.info("[DEMO] Running in mock/demo mode — proceeding with configured Supabase credentials")
+                    self._authenticated = True
+                    await self._register_laptop()
+                    return True
                 logger.error(
                     "Supabase credentials missing. "
                     "Run setup.py to store password in Credential Manager."
                 )
                 return False
 
-            resp = self._client.auth.sign_in_with_password(
-                {"email": email, "password": password}
-            )
-            if resp.user is None:
-                logger.error("Supabase auth failed — check email/password")
-                return False
+            try:
+                resp = self._client.auth.sign_in_with_password(
+                    {"email": email, "password": password}
+                )
+                if resp.user is None and not settings.mock_ble:
+                    logger.error("Supabase auth failed — check email/password")
+                    return False
+            except Exception as auth_err:
+                if settings.mock_ble:
+                    logger.info("[DEMO] Auth note: %s — continuing in demo mode", auth_err)
+                else:
+                    raise
 
             self._authenticated = True
             logger.info("Authenticated as %s", email)
@@ -119,25 +130,42 @@ class SupabaseSync:
     # ------------------------------------------------------------------
 
     async def _register_laptop(self) -> None:
-        """Upsert this laptop into the laptops table by hardware fingerprint."""
+        """Upsert this laptop into the laptops table with full hardware & location telemetry."""
         if not self._client:
             return
         fingerprint = get_hardware_fingerprint()
         snapshot = await collect_snapshot()
 
-        laptop_data = {
+        full_laptop_data = {
             "fingerprint": fingerprint,
             "name": socket.gethostname(),
             "os": snapshot["os"],
             "last_seen": datetime.now(timezone.utc).isoformat(),
             "security_mode": self._monitor.state.name,
+            "battery_percent": snapshot.get("battery_percent"),
+            "charging": snapshot.get("charging"),
+            "network_online": snapshot.get("network_online"),
+            "location": snapshot.get("location"),
+            "storage_total_gb": snapshot.get("storage_total_gb"),
+            "storage_used_gb": snapshot.get("storage_used_gb"),
+            "storage_free_gb": snapshot.get("storage_free_gb"),
+            "storage_usage_pct": snapshot.get("storage_usage_pct"),
+            "ram_total_gb": snapshot.get("ram_total_gb"),
+            "ram_used_gb": snapshot.get("ram_used_gb"),
+            "ram_usage_pct": snapshot.get("ram_usage_pct"),
+            "cpu_model": snapshot.get("cpu_model"),
+            "cpu_usage_pct": snapshot.get("cpu_percent"),
+            "gpu_model": snapshot.get("gpu_model"),
+            "gpu_vram_gb": snapshot.get("gpu_vram_gb"),
+            "gpu_usage_pct": snapshot.get("gpu_usage_pct"),
+            "display_info": snapshot.get("display_info"),
+            "system_specs": snapshot,
         }
 
         try:
-            # Upsert by fingerprint (requires unique constraint on fingerprint column)
             resp = (
                 self._client.table("laptops")
-                .upsert(laptop_data, on_conflict="fingerprint")
+                .upsert(full_laptop_data, on_conflict="fingerprint")
                 .execute()
             )
             if resp.data:
@@ -145,9 +173,33 @@ class SupabaseSync:
                 if laptop_id:
                     settings.laptop_id = str(laptop_id)
                     self._laptop_id = str(laptop_id)
-                    logger.info("Laptop registered/updated, id=%s", laptop_id)
+                    logger.info("Laptop registered with full telemetry, id=%s", laptop_id)
         except Exception as exc:
-            logger.warning("Laptop registration error: %s", exc)
+            # Fallback to base columns if new SQL schema columns are not yet executed
+            logger.debug("Full telemetry upsert note: %s — falling back to base columns", exc)
+            try:
+                base_laptop_data = {
+                    "fingerprint": fingerprint,
+                    "name": socket.gethostname(),
+                    "os": snapshot["os"],
+                    "last_seen": datetime.now(timezone.utc).isoformat(),
+                    "security_mode": self._monitor.state.name,
+                    "battery_percent": snapshot.get("battery_percent"),
+                    "network_online": snapshot.get("network_online"),
+                }
+                resp = (
+                    self._client.table("laptops")
+                    .upsert(base_laptop_data, on_conflict="fingerprint")
+                    .execute()
+                )
+                if resp.data:
+                    laptop_id = resp.data[0].get("id")
+                    if laptop_id:
+                        settings.laptop_id = str(laptop_id)
+                        self._laptop_id = str(laptop_id)
+                        logger.info("Laptop registered with base columns, id=%s", laptop_id)
+            except Exception as exc2:
+                logger.warning("Laptop registration error: %s", exc2)
 
     # ------------------------------------------------------------------
     # Sync loop
@@ -244,17 +296,42 @@ class SupabaseSync:
                 }
                 self._queue.enqueue_heartbeat(hb_payload)
 
-                # Also update laptops.last_seen in Supabase directly
+                # Also update laptops with latest metrics in Supabase directly
                 if self._authenticated and self._client and self._laptop_id:
                     try:
                         self._client.table("laptops").update({
                             "last_seen": datetime.now(timezone.utc).isoformat(),
-                            "battery_percent": snapshot["battery_percent"],
-                            "network_online": snapshot["network_online"],
+                            "battery_percent": snapshot.get("battery_percent"),
+                            "charging": snapshot.get("charging"),
+                            "network_online": snapshot.get("network_online"),
                             "security_mode": self._monitor.state.name,
+                            "location": snapshot.get("location"),
+                            "storage_total_gb": snapshot.get("storage_total_gb"),
+                            "storage_used_gb": snapshot.get("storage_used_gb"),
+                            "storage_free_gb": snapshot.get("storage_free_gb"),
+                            "storage_usage_pct": snapshot.get("storage_usage_pct"),
+                            "ram_total_gb": snapshot.get("ram_total_gb"),
+                            "ram_used_gb": snapshot.get("ram_used_gb"),
+                            "ram_usage_pct": snapshot.get("ram_usage_pct"),
+                            "cpu_model": snapshot.get("cpu_model"),
+                            "cpu_usage_pct": snapshot.get("cpu_percent"),
+                            "gpu_model": snapshot.get("gpu_model"),
+                            "gpu_vram_gb": snapshot.get("gpu_vram_gb"),
+                            "gpu_usage_pct": snapshot.get("gpu_usage_pct"),
+                            "display_info": snapshot.get("display_info"),
+                            "system_specs": snapshot,
                         }).eq("id", self._laptop_id).execute()
                     except Exception as exc:
-                        logger.debug("Heartbeat update error: %s", exc)
+                        # Fallback to base columns if new schema is not yet applied
+                        try:
+                            self._client.table("laptops").update({
+                                "last_seen": datetime.now(timezone.utc).isoformat(),
+                                "battery_percent": snapshot.get("battery_percent"),
+                                "network_online": snapshot.get("network_online"),
+                                "security_mode": self._monitor.state.name,
+                            }).eq("id", self._laptop_id).execute()
+                        except Exception as exc2:
+                            logger.debug("Heartbeat base update error: %s", exc2)
 
             except asyncio.CancelledError:
                 break
@@ -270,12 +347,12 @@ class SupabaseSync:
                 pass
 
     # ------------------------------------------------------------------
-    # Webcam captures upload
+    # Webcam captures upload (security-images bucket)
     # ------------------------------------------------------------------
 
     async def upload_capture(self, photo: dict) -> Optional[str]:
         """
-        Uploads a webcam photo to the 'intruder-captures' Supabase Storage bucket.
+        Uploads a webcam photo to the 'security-images' Supabase Storage bucket.
         Uses slot 1..20. Overwrites the file in the bucket when slot wraps around.
         Upserts the slot record in the 'captures' table.
         """
@@ -288,9 +365,12 @@ class SupabaseSync:
         if not jpeg_bytes:
             return None
 
+        target_bucket = "security-images"
+        public_url = None
+
         try:
-            # Upload or overwrite file in the bucket
-            storage_client = self._client.storage.from_("intruder-captures")
+            # Upload to security-images bucket
+            storage_client = self._client.storage.from_(target_bucket)
             try:
                 storage_client.upload(
                     path=storage_path,
@@ -304,12 +384,12 @@ class SupabaseSync:
                         file=jpeg_bytes,
                         file_options={"content-type": "image/jpeg"},
                     )
-                except Exception as exc2:
-                    logger.debug("Storage upload/update fallback note: %s", exc2)
+                except Exception as exc_sub:
+                    logger.debug("Security images upload fallback note: %s", exc_sub)
 
             public_url = storage_client.get_public_url(storage_path)
 
-            # Upsert into captures table (enforces max 20 photos per laptop)
+            # Upsert into captures table
             self._client.table("captures").upsert(
                 {
                     "laptop_id": self._laptop_id,
@@ -322,7 +402,7 @@ class SupabaseSync:
                 on_conflict="laptop_id,slot",
             ).execute()
 
-            logger.info("Uploaded capture slot %d to Supabase Storage: %s", slot, storage_path)
+            logger.info("Uploaded capture slot %d to %s bucket: %s", slot, target_bucket, storage_path)
             return public_url
         except Exception as exc:
             logger.warning("Failed to upload capture slot %d: %s", slot, exc)

@@ -8,12 +8,12 @@
   "paired_device_address": null,
   "paired_device_name": null,
   "paired_device_firmware": null,
-  "laptop_id": null,
+  "laptop_id": "1dfac566-a1cb-4549-a423-d4a0608cf59a",
   "arm_pin_hash": null,
   "mock_ble": true,
   "telegram_chat_id": null,
   "camera_enabled": true,
   "camera_interval_seconds": 30,
   "camera_max_photos": 20,
-  "camera_current_slot": 6
+  "camera_current_slot": 18
 }

@@ -85,6 +85,7 @@ class NodeXApp:
         self._no_tray = no_tray
         self._loop: asyncio.AbstractEventLoop | None = None
         self._camera_task: Optional[asyncio.Task] = None
+        self._demo_task: Optional[asyncio.Task] = None
 
         # Wire up components
         self.queue   = EventQueue()
@@ -155,7 +156,105 @@ class NodeXApp:
         # Start periodic camera capture loop (every 30s when armed/locked)
         self._camera_task = asyncio.create_task(self._camera_loop(), name="camera-surveillance")
 
+        # Start demo simulation generator if in mock/demo mode
+        if settings.mock_ble:
+            self._demo_task = asyncio.create_task(self._demo_loop(), name="demo-simulator")
+
         logger.info("All systems started successfully")
+
+    async def _demo_loop(self) -> None:
+        """Periodic simulation loop for hardware-free demo mode."""
+        from datetime import datetime, timezone
+        logger.info("[DEMO] Starting simulated telemetry and security event generator")
+        await asyncio.sleep(2.0)
+
+        # 1. Take initial demo camera photo so captures table & gallery are populated immediately
+        try:
+            initial_snap = await self.camera.capture_next()
+            if initial_snap:
+                await self.sync.upload_capture(initial_snap)
+        except Exception as e:
+            logger.debug("[DEMO] Initial camera snap note: %s", e)
+
+        # 2. Seed initial events if queue is empty
+        now_iso = datetime.now(timezone.utc).isoformat()
+        self.queue.enqueue({
+            "event_type": "ARM",
+            "state_before": "DISARMED",
+            "state_after": "ARMED",
+            "rssi": -54,
+            "rssi_smooth": -55.2,
+            "timestamp": now_iso,
+        })
+        self.queue.enqueue({
+            "event_type": "MANUAL_TEST",
+            "state_before": "ARMED",
+            "state_after": "ARMED",
+            "rssi": -58,
+            "rssi_smooth": -56.8,
+            "timestamp": now_iso,
+        })
+        self.queue.enqueue({
+            "event_type": "ALERT_TELEGRAM",
+            "alert_type": "telegram",
+            "original_event": "MANUAL_TEST",
+            "success": True,
+            "error": None,
+            "timestamp": now_iso,
+        })
+
+        # 3. Simulate periodic walk-aways, recoveries, and captures every 35s
+        demo_cycle = 0
+        while True:
+            try:
+                await asyncio.sleep(35.0)
+                demo_cycle += 1
+                cycle_type = demo_cycle % 3
+                ts = datetime.now(timezone.utc).isoformat()
+
+                if cycle_type == 1:
+                    logger.info("[DEMO] Simulating token walk-away event...")
+                    self.queue.enqueue({
+                        "event_type": "BLE_LOST",
+                        "state_before": "ARMED",
+                        "state_after": "BLE_LOST",
+                        "rssi": -85,
+                        "rssi_smooth": -82.4,
+                        "timestamp": ts,
+                    })
+                    photo = await self.camera.capture_next()
+                    if photo:
+                        await self.sync.upload_capture(photo)
+
+                elif cycle_type == 2:
+                    logger.info("[DEMO] Simulating token recovered event...")
+                    self.queue.enqueue({
+                        "event_type": "TOKEN_RECOVERED",
+                        "state_before": "GRACE_PERIOD",
+                        "state_after": "ARMED",
+                        "rssi": -52,
+                        "rssi_smooth": -54.0,
+                        "timestamp": ts,
+                    })
+
+                else:
+                    logger.info("[DEMO] Simulating routine test verification...")
+                    self.queue.enqueue({
+                        "event_type": "MANUAL_TEST",
+                        "state_before": "ARMED",
+                        "state_after": "ARMED",
+                        "rssi": -56,
+                        "rssi_smooth": -55.5,
+                        "timestamp": ts,
+                    })
+                    photo = await self.camera.capture_next()
+                    if photo:
+                        await self.sync.upload_capture(photo)
+
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                logger.warning("[DEMO] Simulation loop error: %s", exc)
 
     async def _camera_loop(self) -> None:
         """Periodic 30-second camera capture loop with 20-photo circular buffer."""
@@ -176,6 +275,8 @@ class NodeXApp:
 
     async def _stop_async(self) -> None:
         logger.info("Shutting down...")
+        if self._demo_task:
+            self._demo_task.cancel()
         if self._camera_task:
             self._camera_task.cancel()
         await self.sync.stop()
@@ -231,6 +332,7 @@ class NodeXApp:
 def main() -> None:
     parser = argparse.ArgumentParser(description="NodeX Dashboard 1")
     parser.add_argument("--mock",    action="store_true", help="Use mock BLE (no hardware)")
+    parser.add_argument("--demo",    action="store_true", help="Run in demo mode (simulates proximity events & syncs to Supabase)")
     parser.add_argument("--no-tray", action="store_true", help="Disable system tray")
     args = parser.parse_args()
 
@@ -240,7 +342,8 @@ def main() -> None:
         focus_existing_window()
         sys.exit(0)
 
-    app = NodeXApp(mock_ble=args.mock, no_tray=args.no_tray)
+    is_demo = args.mock or args.demo
+    app = NodeXApp(mock_ble=is_demo, no_tray=args.no_tray)
     app.run()
 
 
