@@ -54,24 +54,24 @@ export function Events() {
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-base font-bold text-slate-900 dark:text-white">Security Events Audit Log</h2>
-          <p className="text-xs text-slate-500 dark:text-nodex-secondary">Read-only immutable log from Supabase</p>
+          <h2 className="text-base font-bold text-white font-sans">Security Events Audit Log</h2>
+          <p className="text-xs text-[#c9d1de]">Read-only immutable log from Supabase</p>
         </div>
         <div className="flex items-center gap-2">
           <div className="relative">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
+            <Search className="w-3.5 h-3.5 absolute left-3.5 top-3 text-[#7c8ba1]" />
             <input
               type="text"
               placeholder="Search events..."
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-              className="pl-8 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-nodex-border bg-white dark:bg-nodex-card text-slate-900 dark:text-white"
+              className="pl-9 pr-4 py-2 text-xs rounded-full border border-white/15 bg-white/[0.04] text-white placeholder:text-[#7c8ba1] focus:outline-none focus:border-[#006eff] focus:ring-1 focus:ring-[#006eff] transition-all"
             />
           </div>
           <select
             value={eventType}
             onChange={(e) => { setEventType(e.target.value); setPage(1); }}
-            className="px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-nodex-border bg-white dark:bg-nodex-card text-slate-900 dark:text-white font-mono"
+            className="px-3.5 py-2 text-xs rounded-full border border-white/15 bg-[#000d26] text-white font-mono focus:outline-none focus:border-[#006eff] transition-all"
           >
             {EVENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
@@ -89,30 +89,30 @@ export function Events() {
           <Table columns={columns}>
             {events.map((ev) => (
               <TableRow key={ev.id} onClick={() => setSelectedEvent(ev)}>
-                <td className="py-3 px-4 font-mono text-slate-400">#{ev.id}</td>
-                <td className="py-3 px-4"><Badge variant={ev.event_type}>{ev.event_type}</Badge></td>
-                <td className="py-3 px-4 text-slate-500">{ev.state_before} &rarr; {ev.state_after}</td>
-                <td className="py-3 px-4 text-slate-600 dark:text-nodex-primary">{ev.rssi_smooth ? `${ev.rssi_smooth} dBm` : '—'}</td>
-                <td className="py-3 px-4 text-slate-500 truncate max-w-[120px]">{ev.laptops?.name || 'Device'}</td>
-                <td className="py-3 px-4 text-right text-slate-400">{new Date(ev.created_at).toLocaleString()}</td>
+                <td className="py-3.5 px-4 font-mono text-[#7c8ba1]">#{ev.id}</td>
+                <td className="py-3.5 px-4"><Badge variant={ev.event_type}>{ev.event_type}</Badge></td>
+                <td className="py-3.5 px-4 text-[#c9d1de]">{ev.state_before} &rarr; {ev.state_after}</td>
+                <td className="py-3.5 px-4 text-white font-semibold">{ev.rssi_smooth ? `${ev.rssi_smooth} dBm` : '—'}</td>
+                <td className="py-3.5 px-4 text-[#c9d1de] truncate max-w-[120px]">{ev.laptops?.name || 'Device'}</td>
+                <td className="py-3.5 px-4 text-right text-[#7c8ba1]">{new Date(ev.created_at).toLocaleString()}</td>
               </TableRow>
             ))}
           </Table>
 
-          <div className="flex items-center justify-between text-xs font-mono text-slate-500 pt-2">
+          <div className="flex items-center justify-between text-xs font-mono text-[#7c8ba1] pt-2">
             <span>Showing page {page} of {totalPages} ({totalCount} total)</span>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1.5">
               <button
                 disabled={page <= 1}
                 onClick={() => setPage(page - 1)}
-                className="p-1.5 rounded border border-slate-200 dark:border-nodex-border disabled:opacity-40"
+                className="p-2 rounded-full border border-white/15 text-[#c9d1de] hover:text-white hover:border-[#006eff] hover:bg-[#006eff]/15 disabled:opacity-30 transition-all"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <button
                 disabled={page >= totalPages}
                 onClick={() => setPage(page + 1)}
-                className="p-1.5 rounded border border-slate-200 dark:border-nodex-border disabled:opacity-40"
+                className="p-2 rounded-full border border-white/15 text-[#c9d1de] hover:text-white hover:border-[#006eff] hover:bg-[#006eff]/15 disabled:opacity-30 transition-all"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>

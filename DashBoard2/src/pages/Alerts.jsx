@@ -57,7 +57,7 @@ export function Alerts() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-nodex-border bg-white dark:bg-nodex-card font-mono"
+            className="px-3 py-1.5 text-xs rounded-full border border-slate-200 dark:border-white/10 bg-white dark:bg-[#000c24]/90 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-[#006eff] transition-colors font-mono"
           >
             <option value="ALL">All Statuses</option>
             <option value="SUCCESS">Delivered</option>
@@ -66,7 +66,7 @@ export function Alerts() {
           <button
             onClick={loadData}
             aria-label="Refresh alerts"
-            className="p-1.5 rounded-lg border border-slate-200 dark:border-nodex-border bg-white dark:bg-nodex-card text-slate-500 hover:text-cyan-500"
+            className="p-2 rounded-full border border-slate-200 dark:border-white/10 bg-white dark:bg-[#000c24]/90 text-slate-500 dark:text-slate-300 hover:text-[#006eff] hover:border-[#006eff]/50 transition-all shadow-sm"
           >
             <RefreshCw className="w-4 h-4" />
           </button>
@@ -84,19 +84,19 @@ export function Alerts() {
           {filtered.map((al) => (
             <TableRow key={al.id}>
               <td className="py-3 px-4 font-mono text-slate-400">#{al.id}</td>
-              <td className="py-3 px-4 flex items-center gap-2 uppercase font-mono">
-                <Send className="w-3.5 h-3.5 text-cyan-500" />
-                {al.alert_type || 'telegram'}
+              <td className="py-3 px-4 flex items-center gap-2 uppercase font-mono text-xs">
+                <Send className="w-3.5 h-3.5 text-[#006eff]" />
+                <span className="text-slate-200 font-semibold">{al.alert_type || 'telegram'}</span>
               </td>
               <td className="py-3 px-4"><Badge variant={al.event_type}>{al.event_type || 'SECURITY_EVENT'}</Badge></td>
               <td className="py-3 px-4 font-mono">
                 {al.success ? (
-                  <span className="inline-flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
-                    <CheckCircle2 className="w-4 h-4" /> Delivered
+                  <span className="inline-flex items-center gap-1.5 text-emerald-400 font-medium">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Delivered
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1.5 text-rose-600 dark:text-rose-400">
-                    <AlertCircle className="w-4 h-4" /> Failed
+                  <span className="inline-flex items-center gap-1.5 text-rose-400 font-medium">
+                    <AlertCircle className="w-4 h-4 text-rose-400" /> Failed
                   </span>
                 )}
               </td>

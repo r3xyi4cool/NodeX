@@ -79,16 +79,16 @@ export function Stats() {
         </Card>
 
         <Card title="Event Type Distribution" subtitle="Proportional breakdown across all event categories">
-          <div className="space-y-3 font-mono text-xs">
+          <div className="space-y-4 font-mono text-xs">
             {typeDistribution.map((item) => (
               <div key={item.type}>
-                <div className="flex justify-between text-slate-700 dark:text-nodex-primary mb-1">
-                  <span>{item.type}</span>
-                  <span className="text-slate-400">{item.count} ({item.percent}%)</span>
+                <div className="flex justify-between text-slate-700 dark:text-slate-200 mb-1.5 font-medium">
+                  <span className="text-slate-300">{item.type}</span>
+                  <span className="text-slate-400 font-semibold">{item.count} <span className="text-[#006eff]">({item.percent}%)</span></span>
                 </div>
-                <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-nodex-card2 overflow-hidden border border-slate-200/50 dark:border-nodex-border/40">
+                <div className="w-full h-2.5 rounded-full bg-slate-100 dark:bg-white/5 overflow-hidden border border-slate-200/50 dark:border-white/10 p-[1px]">
                   <div
-                    className="h-full bg-cyan-500 rounded-full transition-all duration-500"
+                    className="h-full bg-gradient-to-r from-[#006eff] to-[#00d2ff] rounded-full shadow-[0_0_8px_rgba(0,110,255,0.4)] transition-all duration-500"
                     style={{ width: `${item.percent}%` }}
                   />
                 </div>

@@ -8,7 +8,7 @@ export function ThemeToggle({ className = '' }) {
 
   return (
     <div
-      className={`inline-flex items-center p-1 rounded-lg border border-slate-200 dark:border-nodex-border bg-slate-100 dark:bg-nodex-card2 ${className}`}
+      className={`inline-flex items-center p-1 rounded-full border border-white/15 bg-white/[0.03] backdrop-blur-md ${className}`}
       role="group"
       aria-label="Theme switcher"
     >
@@ -17,39 +17,39 @@ export function ThemeToggle({ className = '' }) {
         onClick={() => setTheme('light')}
         aria-label="Light mode"
         aria-pressed={theme === 'light'}
-        className={`p-1.5 rounded-md transition-colors focus:outline-none focus:ring-1 focus:ring-cyan-500 ${
+        className={`p-1.5 rounded-full transition-all focus:outline-none ${
           theme === 'light'
-            ? 'bg-white text-amber-500 shadow-sm'
-            : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'
+            ? 'bg-white/15 text-[#fbbf24] border border-white/25 shadow-sm'
+            : 'text-[#7c8ba1] hover:text-white'
         }`}
       >
-        <Sun className="w-4 h-4" />
+        <Sun className="w-3.5 h-3.5" />
       </button>
       <button
         type="button"
         onClick={() => setTheme('dark')}
         aria-label="Dark mode"
         aria-pressed={theme === 'dark'}
-        className={`p-1.5 rounded-md transition-colors focus:outline-none focus:ring-1 focus:ring-cyan-500 ${
+        className={`p-1.5 rounded-full transition-all focus:outline-none ${
           theme === 'dark'
-            ? 'bg-nodex-card text-nodex-cyan shadow-sm'
-            : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'
+            ? 'bg-[#006eff]/20 text-[#006eff] border border-[#006eff]/40 shadow-[0_0_12px_rgba(0,110,255,0.35)]'
+            : 'text-[#7c8ba1] hover:text-white'
         }`}
       >
-        <Moon className="w-4 h-4" />
+        <Moon className="w-3.5 h-3.5" />
       </button>
       <button
         type="button"
         onClick={() => setTheme('system')}
         aria-label="System mode"
         aria-pressed={theme === 'system'}
-        className={`p-1.5 rounded-md transition-colors focus:outline-none focus:ring-1 focus:ring-cyan-500 ${
+        className={`p-1.5 rounded-full transition-all focus:outline-none ${
           theme === 'system'
-            ? 'bg-white dark:bg-nodex-card text-cyan-600 dark:text-nodex-cyan shadow-sm'
-            : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'
+            ? 'bg-[#006eff]/20 text-white border border-[#006eff]/40 shadow-[0_0_12px_rgba(0,110,255,0.35)]'
+            : 'text-[#7c8ba1] hover:text-white'
         }`}
       >
-        <Monitor className="w-4 h-4" />
+        <Monitor className="w-3.5 h-3.5" />
       </button>
     </div>
   );

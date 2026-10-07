@@ -5,12 +5,12 @@ import { AnimatedNumber } from './AnimatedNumber';
 
 export function StatCard({ title, value, subtitle, icon: Icon, color = 'cyan', change }) {
   const colorMap = {
-    cyan: 'text-cyan-500 dark:text-nodex-cyan bg-cyan-500/10 border-cyan-500/20',
-    green: 'text-emerald-500 dark:text-nodex-green bg-emerald-500/10 border-emerald-500/20',
-    amber: 'text-amber-500 dark:text-nodex-amber bg-amber-500/10 border-amber-500/20',
-    orange: 'text-orange-500 dark:text-nodex-orange bg-orange-500/10 border-orange-500/20',
-    red: 'text-rose-500 dark:text-nodex-red bg-rose-500/10 border-rose-500/20',
-    slate: 'text-slate-500 dark:text-slate-400 bg-slate-500/10 border-slate-500/20',
+    cyan: 'text-[#006eff] bg-[#006eff]/15 border-[#006eff]/35 shadow-[0_0_16px_rgba(0,110,255,0.25)]',
+    green: 'text-[#34d399] bg-[#34d399]/15 border-[#34d399]/35 shadow-[0_0_16px_rgba(52,211,153,0.2)]',
+    amber: 'text-[#fbbf24] bg-[#fbbf24]/15 border-[#fbbf24]/35 shadow-[0_0_16px_rgba(251,191,36,0.2)]',
+    orange: 'text-[#fb923c] bg-[#fb923c]/15 border-[#fb923c]/35 shadow-[0_0_16px_rgba(251,146,60,0.2)]',
+    red: 'text-[#f87171] bg-[#f87171]/15 border-[#f87171]/35 shadow-[0_0_16px_rgba(248,113,113,0.2)]',
+    slate: 'text-[#c9d1de] bg-white/5 border-white/15',
   };
 
   const badgeClass = colorMap[color] || colorMap.cyan;
@@ -19,23 +19,23 @@ export function StatCard({ title, value, subtitle, icon: Icon, color = 'cyan', c
     <Card hover className="relative overflow-hidden group">
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-nodex-secondary">
+          <p className="text-xs font-mono font-semibold uppercase tracking-wider text-[#c9d1de]">
             {title}
           </p>
-          <div className="mt-2 text-3xl font-bold font-mono tracking-tight text-slate-900 dark:text-white">
+          <div className="mt-2 text-3xl font-bold font-mono tracking-tight text-white drop-shadow-[0_0_12px_rgba(255,255,255,0.2)]">
             <AnimatedNumber value={value} />
           </div>
           {subtitle && (
-            <p className="mt-1 text-xs text-slate-500 dark:text-nodex-secondary">{subtitle}</p>
+            <p className="mt-1 text-xs text-[#7c8ba1]">{subtitle}</p>
           )}
           {change && (
-            <span className="inline-block mt-2 text-xs font-mono font-medium text-emerald-500 dark:text-nodex-green">
+            <span className="inline-block mt-2 text-xs font-mono font-medium text-[#34d399]">
               {change}
             </span>
           )}
         </div>
         {Icon && (
-          <div className={`p-3 rounded-xl border ${badgeClass} transition-transform duration-200 group-hover:scale-110`}>
+          <div className={`p-3 rounded-2xl border ${badgeClass} transition-all duration-300 group-hover:scale-110`}>
             <Icon className="w-6 h-6" aria-hidden="true" />
           </div>
         )}

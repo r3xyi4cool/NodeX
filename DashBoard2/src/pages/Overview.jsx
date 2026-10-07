@@ -98,22 +98,22 @@ export function Overview({ onOpenLightbox }) {
   return (
     <div className="space-y-6">
       {/* Laptop Status Header Banner */}
-      <Card hover={false} className="bg-gradient-to-r from-cyan-950/20 to-slate-900/10">
+      <Card hover={false} className="border-l-4 border-l-[#006eff] bg-gradient-to-r from-[#001233]/70 via-[#000d26]/80 to-[#000511]/90">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3.5">
-            <div className={`p-3 rounded-xl border ${isOnline ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-500' : 'border-rose-500/30 bg-rose-500/10 text-rose-500'}`}>
+            <div className={`p-3 rounded-2xl border ${isOnline ? 'border-[#34d399]/40 bg-[#34d399]/15 text-[#34d399] shadow-[0_0_16px_rgba(52,211,153,0.25)]' : 'border-[#f87171]/40 bg-[#f87171]/15 text-[#f87171] shadow-[0_0_16px_rgba(248,113,113,0.25)]'}`}>
               <Laptop className="w-6 h-6" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm font-bold text-slate-900 dark:text-white">
+              <div className="flex items-center gap-2.5">
+                <h2 className="text-sm font-bold text-white font-sans">
                   {primaryLaptop?.name || 'No Registered Laptop'}
                 </h2>
                 <Badge variant={isOnline ? 'ONLINE' : 'OFFLINE'}>
                   {isOnline ? 'ONLINE' : 'OFFLINE'}
                 </Badge>
               </div>
-              <p className="text-xs text-slate-500 dark:text-nodex-secondary mt-0.5">
+              <p className="text-xs text-[#c9d1de] mt-0.5 font-sans">
                 {isOnline
                   ? `Active & Monitoring • Mode: ${primaryLaptop?.security_mode || 'DISARMED'}`
                   : primaryLaptop?.last_seen
@@ -125,7 +125,7 @@ export function Overview({ onOpenLightbox }) {
           <button
             onClick={loadData}
             aria-label="Refresh telemetry data"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-nodex-border bg-white dark:bg-nodex-card text-xs font-mono text-slate-600 dark:text-nodex-secondary hover:text-cyan-500 transition-colors"
+            className="btn-cyber-pill border-white/20 bg-white/[0.04] hover:bg-[#006eff]/20 hover:border-[#006eff] hover:shadow-[0_0_20px_rgba(0,110,255,0.4)] text-xs text-[#c9d1de] hover:text-white"
           >
             <RefreshCw className="w-3.5 h-3.5" />
             Refresh
@@ -153,16 +153,16 @@ export function Overview({ onOpenLightbox }) {
           <Card
             title="Latest Security Events"
             subtitle="Most recent audit logs"
-            action={<Link to="/events" className="text-xs font-mono text-cyan-500 flex items-center gap-1 hover:underline">View All <ExternalLink className="w-3 h-3" /></Link>}
+            action={<Link to="/events" className="text-xs font-mono text-[#006eff] flex items-center gap-1 hover:underline">View All <ExternalLink className="w-3 h-3" /></Link>}
           >
             <div className="space-y-3 font-mono">
               {recentEvents.map((ev) => (
-                <div key={ev.id} className="flex items-center justify-between text-xs py-1.5 border-b border-slate-100 dark:border-nodex-border/40 last:border-0">
+                <div key={ev.id} className="flex items-center justify-between text-xs py-2 border-b border-white/[0.06] last:border-0">
                   <div className="flex items-center gap-2">
                     <Badge variant={ev.event_type}>{ev.event_type}</Badge>
-                    <span className="text-slate-500 text-[11px] truncate max-w-[120px]">{ev.laptops?.name || 'Device'}</span>
+                    <span className="text-[#c9d1de] text-[11px] truncate max-w-[120px]">{ev.laptops?.name || 'Device'}</span>
                   </div>
-                  <span className="text-[11px] text-slate-400">{new Date(ev.created_at).toLocaleTimeString()}</span>
+                  <span className="text-[11px] text-[#7c8ba1]">{new Date(ev.created_at).toLocaleTimeString()}</span>
                 </div>
               ))}
             </div>
@@ -174,19 +174,19 @@ export function Overview({ onOpenLightbox }) {
       <Card
         title="Recent Intruder Captures"
         subtitle="Last 4 webcam surveillance frames (20-photo ring buffer)"
-        action={<Link to="/captures" className="text-xs font-mono text-cyan-500 flex items-center gap-1 hover:underline">Gallery <ExternalLink className="w-3 h-3" /></Link>}
+        action={<Link to="/captures" className="text-xs font-mono text-[#006eff] flex items-center gap-1 hover:underline">Gallery <ExternalLink className="w-3 h-3" /></Link>}
       >
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {captures.map((c, idx) => (
             <div
               key={c.id || idx}
               onClick={() => onOpenLightbox && onOpenLightbox(captures, idx)}
-              className="group relative rounded-xl overflow-hidden border border-slate-200 dark:border-nodex-border bg-black aspect-video cursor-pointer hover:border-cyan-500/50 transition-all"
+              className="group relative rounded-2xl overflow-hidden border border-white/10 bg-black aspect-video cursor-pointer hover:border-[#006eff]/50 hover:shadow-[0_0_20px_rgba(0,110,255,0.25)] transition-all"
             >
               <img src={c.url} alt={`Slot ${c.slot}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-90 p-2 flex flex-col justify-end text-[10px] font-mono text-white">
-                <span>Slot {c.slot} • {c.security_mode}</span>
-                <span className="text-slate-400">{new Date(c.captured_at).toLocaleTimeString()}</span>
+              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent opacity-95 p-2.5 flex flex-col justify-end text-[10px] font-mono text-white">
+                <span className="font-semibold text-white">Slot {c.slot} • {c.security_mode}</span>
+                <span className="text-[#c9d1de]">{new Date(c.captured_at).toLocaleTimeString()}</span>
               </div>
             </div>
           ))}

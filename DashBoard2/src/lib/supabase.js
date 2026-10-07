@@ -4,9 +4,16 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
-export const isConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+export const isConfigured = Boolean(
+  supabaseUrl &&
+  supabaseAnonKey &&
+  supabaseUrl !== 'https://your-project.supabase.co'
+);
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+const clientUrl = isConfigured ? supabaseUrl : 'https://placeholder.supabase.co';
+const clientKey = isConfigured ? supabaseAnonKey : 'placeholder-anon-key';
+
+export const supabase = createClient(clientUrl, clientKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,

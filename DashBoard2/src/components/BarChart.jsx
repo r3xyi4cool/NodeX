@@ -25,8 +25,7 @@ export function BarChart({ data = [], height = 180, className = '' }) {
           y1={height}
           x2={chartWidth - 10}
           y2={height}
-          stroke="currentColor"
-          className="text-slate-200 dark:text-slate-800"
+          stroke="rgba(255, 255, 255, 0.12)"
           strokeWidth="1"
         />
 
@@ -50,8 +49,8 @@ export function BarChart({ data = [], height = 180, className = '' }) {
                   y="10"
                   width={barWidth + 8}
                   height={height + 25}
-                  rx="6"
-                  className="fill-cyan-500/10 dark:fill-nodex-cyan/10"
+                  rx="8"
+                  className="fill-[#006eff]/15"
                 />
               )}
 
@@ -61,11 +60,11 @@ export function BarChart({ data = [], height = 180, className = '' }) {
                 y={y}
                 width={barWidth}
                 height={barHeight}
-                rx="4"
+                rx="6"
                 className={`transition-all duration-300 ${
                   isHovered
-                    ? 'fill-cyan-500 dark:fill-nodex-cyan'
-                    : 'fill-cyan-600/70 dark:fill-cyan-400/60'
+                    ? 'fill-[#006eff] drop-shadow-[0_0_12px_rgba(0,110,255,0.7)]'
+                    : 'fill-[#006eff]/60'
                 }`}
               />
 
@@ -75,7 +74,7 @@ export function BarChart({ data = [], height = 180, className = '' }) {
                   x={x + barWidth / 2}
                   y={Math.max(y - 6, 12)}
                   textAnchor="middle"
-                  className="text-[10px] font-mono font-bold fill-slate-800 dark:fill-white"
+                  className="text-[10px] font-mono font-bold fill-white"
                 >
                   {item.value}
                 </text>
@@ -84,9 +83,9 @@ export function BarChart({ data = [], height = 180, className = '' }) {
               {/* Label */}
               <text
                 x={x + barWidth / 2}
-                y={height + 16}
+                y={height + 18}
                 textAnchor="middle"
-                className="text-[9px] font-mono fill-slate-500 dark:fill-slate-400"
+                className="text-[10px] font-mono fill-[#c9d1de]"
               >
                 {item.label}
               </text>

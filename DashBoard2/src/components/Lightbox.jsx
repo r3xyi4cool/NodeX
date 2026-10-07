@@ -42,7 +42,7 @@ export function Lightbox({ photos = [], currentIndex = 0, isOpen, onClose, onNav
             <button
               onClick={() => setZoomed(!zoomed)}
               aria-label={zoomed ? 'Zoom out' : 'Zoom in'}
-              className="p-2 text-white/80 hover:text-white rounded-lg bg-white/10 hover:bg-white/20"
+              className="p-2 text-white/90 hover:text-white rounded-full border border-white/20 bg-white/5 hover:bg-[#006eff]/20 hover:border-[#006eff] transition-all"
             >
               {zoomed ? <ZoomOut className="w-4 h-4" /> : <ZoomIn className="w-4 h-4" />}
             </button>
@@ -53,7 +53,7 @@ export function Lightbox({ photos = [], currentIndex = 0, isOpen, onClose, onNav
                 target="_blank"
                 rel="noreferrer"
                 aria-label="Download photo"
-                className="p-2 text-white/80 hover:text-white rounded-lg bg-white/10 hover:bg-white/20"
+                className="p-2 text-white/90 hover:text-white rounded-full border border-white/20 bg-white/5 hover:bg-[#006eff]/20 hover:border-[#006eff] transition-all"
               >
                 <Download className="w-4 h-4" />
               </a>
@@ -61,7 +61,7 @@ export function Lightbox({ photos = [], currentIndex = 0, isOpen, onClose, onNav
             <button
               onClick={onClose}
               aria-label="Close lightbox"
-              className="p-2 text-white/80 hover:text-white rounded-lg bg-white/10 hover:bg-white/20"
+              className="p-2 text-white/90 hover:text-white rounded-full border border-white/20 bg-white/5 hover:bg-[#006eff]/20 hover:border-[#006eff] transition-all"
             >
               <X className="w-4 h-4" />
             </button>

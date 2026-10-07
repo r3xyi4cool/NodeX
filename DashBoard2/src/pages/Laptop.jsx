@@ -49,12 +49,12 @@ export function Laptop() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-base font-bold text-slate-900 dark:text-white">Registered Laptop Telemetry</h2>
-          <p className="text-xs text-slate-500 dark:text-nodex-secondary">Hardware specs, SSD storage, RAM, CPU, GPU, display and live location</p>
+          <h2 className="text-base font-bold text-white font-sans">Registered Laptop Telemetry</h2>
+          <p className="text-xs text-[#c9d1de]">Hardware specs, SSD storage, RAM, CPU, GPU, display and live location</p>
         </div>
-        <span className="text-xs font-mono text-cyan-500 bg-cyan-500/10 px-2.5 py-1 rounded-lg border border-cyan-500/20">
+        <span className="text-xs font-mono text-[#006eff] bg-[#006eff]/12 px-3 py-1 rounded-full border border-[#006eff]/30 shadow-[0_0_12px_rgba(0,110,255,0.2)]">
           Values labeled as of last sync
         </span>
       </div>
@@ -91,22 +91,22 @@ export function Laptop() {
           const displayInfo = laptop.display_info ?? hb?.display_info ?? specs.display_info ?? '1920x1080 (1 display)';
 
           return (
-            <Card key={laptop.id} hover={false} className="border-l-4 border-l-cyan-500 space-y-6">
+            <Card key={laptop.id} hover={false} className="border-l-4 border-l-[#006eff] space-y-6">
               {/* Header */}
-              <div className="flex flex-col md:flex-row md:items-center justify-between pb-4 border-b border-slate-100 dark:border-nodex-border/60 gap-4">
+              <div className="flex flex-col md:flex-row md:items-center justify-between pb-4 border-b border-white/10 gap-4">
                 <div className="flex items-center gap-3">
-                  <div className="p-3 rounded-xl bg-slate-100 dark:bg-nodex-card2 border border-slate-200 dark:border-nodex-border text-cyan-500">
+                  <div className="p-3 rounded-2xl bg-white/[0.04] border border-white/10 text-[#006eff]">
                     <LaptopIcon className="w-6 h-6" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2.5">
                       {laptop.name}
                       <Badge variant={isOnline ? 'ONLINE' : 'OFFLINE'}>{isOnline ? 'ONLINE' : 'OFFLINE'}</Badge>
                     </h3>
-                    <p className="text-xs font-mono text-slate-500 dark:text-nodex-dim">{laptop.os || 'Windows 11'}</p>
+                    <p className="text-xs font-mono text-[#c9d1de]">{laptop.os || 'Windows 11'}</p>
                   </div>
                 </div>
-                <div className="text-xs font-mono text-slate-400">
+                <div className="text-xs font-mono text-[#7c8ba1]">
                   Last seen: {laptop.last_seen ? new Date(laptop.last_seen).toLocaleString() : 'Never'}
                 </div>
               </div>
@@ -114,61 +114,61 @@ export function Laptop() {
               {/* Hardware Spec Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 font-mono text-xs">
                 {/* 1. Location */}
-                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-nodex-card2 border border-slate-200/60 dark:border-nodex-border/40">
-                  <div className="flex items-center gap-2 text-slate-400 mb-1.5">
-                    <MapPin className="w-3.5 h-3.5 text-rose-500" />
+                <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10">
+                  <div className="flex items-center gap-2 text-[#7c8ba1] mb-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-[#f87171]" />
                     <span>Location</span>
                   </div>
-                  <div className="text-xs font-bold text-slate-800 dark:text-white truncate" title={locText}>
+                  <div className="text-xs font-bold text-white truncate" title={locText}>
                     {locText}
                   </div>
-                  <span className="text-[11px] text-slate-400 mt-1 block">IP: {loc.ip || hb?.network_ip || 'Private/Wi-Fi'}</span>
+                  <span className="text-[11px] text-[#7c8ba1] mt-1 block">IP: {loc.ip || hb?.network_ip || 'Private/Wi-Fi'}</span>
                 </div>
 
                 {/* 2. Battery */}
-                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-nodex-card2 border border-slate-200/60 dark:border-nodex-border/40">
-                  <div className="flex items-center gap-2 text-slate-400 mb-1.5">
-                    <Battery className="w-3.5 h-3.5 text-emerald-500" />
+                <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10">
+                  <div className="flex items-center gap-2 text-[#7c8ba1] mb-1.5">
+                    <Battery className="w-3.5 h-3.5 text-[#34d399]" />
                     <span>Battery & Power</span>
                   </div>
-                  <div className="text-sm font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                  <div className="text-sm font-bold text-white flex items-center gap-2">
                     {batPct}%
-                    <span className="text-[11px] font-normal text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                    <span className="text-[11px] font-normal text-[#34d399] flex items-center gap-1">
                       {isCharging ? <><Zap className="w-3 h-3" /> Charging</> : 'On Battery'}
                     </span>
                   </div>
-                  <div className="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full mt-2 overflow-hidden">
-                    <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${batPct}%` }} />
+                  <div className="w-full h-1.5 bg-white/10 rounded-full mt-2.5 overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-[#34d399] to-[#10b981] rounded-full shadow-[0_0_8px_rgba(52,211,153,0.5)]" style={{ width: `${batPct}%` }} />
                   </div>
                 </div>
 
                 {/* 3. Storage / SSD */}
-                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-nodex-card2 border border-slate-200/60 dark:border-nodex-border/40">
-                  <div className="flex items-center gap-2 text-slate-400 mb-1.5">
-                    <HardDrive className="w-3.5 h-3.5 text-cyan-500" />
+                <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10">
+                  <div className="flex items-center gap-2 text-[#7c8ba1] mb-1.5">
+                    <HardDrive className="w-3.5 h-3.5 text-[#006eff]" />
                     <span>Storage / SSD</span>
                   </div>
-                  <div className="text-xs font-bold text-slate-800 dark:text-white">
+                  <div className="text-xs font-bold text-white">
                     {diskUsed} GB / {diskTotal} GB ({diskPct}%)
                   </div>
-                  <span className="text-[11px] text-slate-400 mt-1 block">{diskFree} GB Free</span>
-                  <div className="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full mt-2 overflow-hidden">
-                    <div className="h-full bg-cyan-500 rounded-full" style={{ width: `${Math.min(diskPct, 100)}%` }} />
+                  <span className="text-[11px] text-[#7c8ba1] mt-1 block">{diskFree} GB Free</span>
+                  <div className="w-full h-1.5 bg-white/10 rounded-full mt-2.5 overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-[#006eff] to-[#38bdf8] rounded-full shadow-[0_0_8px_rgba(0,110,255,0.5)]" style={{ width: `${Math.min(diskPct, 100)}%` }} />
                   </div>
                 </div>
 
                 {/* 4. RAM */}
-                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-nodex-card2 border border-slate-200/60 dark:border-nodex-border/40">
-                  <div className="flex items-center gap-2 text-slate-400 mb-1.5">
-                    <HardDrive className="w-3.5 h-3.5 text-purple-500" />
+                <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10">
+                  <div className="flex items-center gap-2 text-[#7c8ba1] mb-1.5">
+                    <HardDrive className="w-3.5 h-3.5 text-[#a855f7]" />
                     <span>RAM Memory</span>
                   </div>
-                  <div className="text-xs font-bold text-slate-800 dark:text-white">
+                  <div className="text-xs font-bold text-white">
                     {ramUsed} GB / {ramTotal} GB ({ramPct}%)
                   </div>
-                  <span className="text-[11px] text-slate-400 mt-1 block">{(ramTotal - ramUsed).toFixed(1)} GB Available</span>
-                  <div className="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full mt-2 overflow-hidden">
-                    <div className="h-full bg-purple-500 rounded-full" style={{ width: `${Math.min(ramPct, 100)}%` }} />
+                  <span className="text-[11px] text-[#7c8ba1] mt-1 block">{(ramTotal - ramUsed).toFixed(1)} GB Available</span>
+                  <div className="w-full h-1.5 bg-white/10 rounded-full mt-2.5 overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-[#a855f7] to-[#c084fc] rounded-full shadow-[0_0_8px_rgba(168,85,247,0.5)]" style={{ width: `${Math.min(ramPct, 100)}%` }} />
                   </div>
                 </div>
               </div>
@@ -176,45 +176,45 @@ export function Laptop() {
               {/* Processing & Display Row */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-mono text-xs">
                 {/* CPU */}
-                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-nodex-card2 border border-slate-200/60 dark:border-nodex-border/40">
-                  <div className="flex items-center gap-2 text-slate-400 mb-1.5">
-                    <Cpu className="w-3.5 h-3.5 text-blue-500" />
+                <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10">
+                  <div className="flex items-center gap-2 text-[#7c8ba1] mb-1.5">
+                    <Cpu className="w-3.5 h-3.5 text-[#006eff]" />
                     <span>CPU Model & Load</span>
                   </div>
-                  <div className="text-xs font-bold text-slate-800 dark:text-white truncate" title={cpuModel}>
+                  <div className="text-xs font-bold text-white truncate" title={cpuModel}>
                     {cpuModel}
                   </div>
-                  <span className="text-[11px] text-cyan-600 dark:text-nodex-cyan mt-1 block">Active Load: {cpuPct}%</span>
+                  <span className="text-[11px] text-[#006eff] mt-1 block">Active Load: {cpuPct}%</span>
                 </div>
 
                 {/* GPU */}
-                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-nodex-card2 border border-slate-200/60 dark:border-nodex-border/40">
-                  <div className="flex items-center gap-2 text-slate-400 mb-1.5">
-                    <Cpu className="w-3.5 h-3.5 text-emerald-500" />
+                <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10">
+                  <div className="flex items-center gap-2 text-[#7c8ba1] mb-1.5">
+                    <Cpu className="w-3.5 h-3.5 text-[#34d399]" />
                     <span>GPU Model & VRAM</span>
                   </div>
-                  <div className="text-xs font-bold text-slate-800 dark:text-white truncate" title={gpuModel}>
+                  <div className="text-xs font-bold text-white truncate" title={gpuModel}>
                     {gpuModel}
                   </div>
-                  <span className="text-[11px] text-slate-400 mt-1 block">{gpuVram} GB VRAM &bull; Load: {gpuPct}%</span>
+                  <span className="text-[11px] text-[#7c8ba1] mt-1 block">{gpuVram} GB VRAM &bull; Load: {gpuPct}%</span>
                 </div>
 
                 {/* Display */}
-                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-nodex-card2 border border-slate-200/60 dark:border-nodex-border/40">
-                  <div className="flex items-center gap-2 text-slate-400 mb-1.5">
-                    <Monitor className="w-3.5 h-3.5 text-amber-500" />
+                <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10">
+                  <div className="flex items-center gap-2 text-[#7c8ba1] mb-1.5">
+                    <Monitor className="w-3.5 h-3.5 text-[#fbbf24]" />
                     <span>Display Output</span>
                   </div>
-                  <div className="text-xs font-bold text-slate-800 dark:text-white">
+                  <div className="text-xs font-bold text-white">
                     {displayInfo}
                   </div>
-                  <span className="text-[11px] text-slate-400 mt-1 block">Primary Windows Display</span>
+                  <span className="text-[11px] text-[#7c8ba1] mt-1 block">Primary Windows Display</span>
                 </div>
               </div>
 
               {/* Footer */}
-              <div className="pt-3 border-t border-slate-100 dark:border-nodex-border/40 flex flex-col sm:flex-row items-start sm:items-center justify-between text-[11px] font-mono text-slate-400 gap-2">
-                <span>Hardware Fingerprint: <span className="text-slate-600 dark:text-nodex-dim">{laptop.fingerprint?.slice(0, 16)}••••••••</span></span>
+              <div className="pt-3 border-t border-white/10 flex flex-col sm:flex-row items-start sm:items-center justify-between text-[11px] font-mono text-[#7c8ba1] gap-2">
+                <span>Hardware Fingerprint: <span className="text-[#c9d1de]">{laptop.fingerprint?.slice(0, 16)}••••••••</span></span>
                 <span>UUID: {laptop.id.slice(0, 8)}</span>
               </div>
             </Card>
