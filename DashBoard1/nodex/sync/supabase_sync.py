@@ -213,6 +213,7 @@ class SupabaseSync:
                 if ok:
                     await self._push_events()
                     await self._push_heartbeats()
+                    await self._push_alerts()
                     attempt = 0
                 else:
                     raise RuntimeError("Not authenticated")
@@ -240,14 +241,36 @@ class SupabaseSync:
         rows = self._queue.get_unsynced(table="events")
         if not rows:
             return
+        # Columns that exist in the Supabase events table
+        EVENTS_ALLOWED_KEYS = {
+            "laptop_id", "event_type", "created_at",
+            "state_before", "state_after", "rssi", "rssi_smooth",
+            "image_url", "timestamp",
+        }
         logger.debug("Pushing %d events to Supabase", len(rows))
         for row in rows:
             try:
+                # Skip alert events that were accidentally stored in the events
+                # table by older code — permanently mark them as errors so they
+                # don't keep blocking the sync queue.
+                if row["event_type"] == "ALERT_TELEGRAM":
+                    self._queue.mark_error(
+                        row["id"],
+                        "ALERT_TELEGRAM rows belong in the alerts table (migrated)",
+                        table="events",
+                    )
+                    # Mark as synced so they stop being retried
+                    self._queue.mark_synced(row["id"], table="events")
+                    continue
+
+                # Strip any payload keys not present in the events table
+                raw_payload = {k: v for k, v in row["payload"].items()
+                               if k in EVENTS_ALLOWED_KEYS}
                 payload = {
                     "laptop_id": self._laptop_id,
                     "event_type": row["event_type"],
                     "created_at": row["created_at"],
-                    **row["payload"],
+                    **raw_payload,
                 }
                 self._client.table("events").insert(payload).execute()
                 self._queue.mark_synced(row["id"], table="events")
@@ -275,9 +298,32 @@ class SupabaseSync:
                 logger.warning("Failed to push heartbeat %d: %s", row["id"], exc)
                 self._queue.mark_error(row["id"], str(exc), table="heartbeats")
 
-    # ------------------------------------------------------------------
-    # Heartbeat loop
-    # ------------------------------------------------------------------
+    async def _push_alerts(self) -> None:
+        """Push unsynced alert records to Supabase alerts table."""
+        if not self._client or not self._laptop_id:
+            return
+        rows = self._queue.get_unsynced(table="alerts")
+        if not rows:
+            return
+        for row in rows:
+            try:
+                p = row["payload"]
+                payload = {
+                    "laptop_id": self._laptop_id,
+                    "event_type": row["event_type"],
+                    "alert_type": p.get("alert_type"),
+                    "original_event": p.get("original_event"),
+                    "success": p.get("success"),
+                    "error": p.get("error"),
+                    "created_at": row["created_at"],
+                }
+                self._client.table("alerts").insert(payload).execute()
+                self._queue.mark_synced(row["id"], table="alerts")
+            except Exception as exc:
+                logger.warning("Failed to push alert %d: %s", row["id"], exc)
+                self._queue.mark_error(row["id"], str(exc), table="alerts")
+
+
 
     async def _heartbeat_loop(self) -> None:
         """Every N seconds, collect a snapshot and enqueue a heartbeat."""

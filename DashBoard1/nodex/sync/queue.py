@@ -44,6 +44,16 @@ CREATE TABLE IF NOT EXISTS heartbeats (
     synced_at   TEXT,
     error       TEXT
 );
+
+CREATE TABLE IF NOT EXISTS alerts (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_type  TEXT    NOT NULL,   -- e.g. ALERT_TELEGRAM
+    payload     TEXT    NOT NULL,   -- JSON blob (alert_type, original_event, success, error)
+    created_at  TEXT    NOT NULL,
+    synced      INTEGER NOT NULL DEFAULT 0,
+    synced_at   TEXT,
+    error       TEXT
+);
 """
 
 
@@ -152,7 +162,8 @@ class EventQueue:
         with self._get_conn() as conn:
             ev = conn.execute("SELECT COUNT(*) FROM events WHERE synced=0").fetchone()[0]
             hb = conn.execute("SELECT COUNT(*) FROM heartbeats WHERE synced=0").fetchone()[0]
-        return ev + hb
+            al = conn.execute("SELECT COUNT(*) FROM alerts WHERE synced=0").fetchone()[0]
+        return ev + hb + al
 
     @property
     def pending_count(self) -> int:

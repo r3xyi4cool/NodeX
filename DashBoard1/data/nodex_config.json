@@ -5,15 +5,15 @@
   "heartbeat_interval_seconds": 30,
   "ui_port": 7878,
   "enable_location": false,
-  "paired_device_address": null,
-  "paired_device_name": null,
-  "paired_device_firmware": null,
+  "paired_device_address": "B4:BF:E9:22:87:62",
+  "paired_device_name": "NodeX",
+  "paired_device_firmware": "NodeX ready",
   "laptop_id": "1dfac566-a1cb-4549-a423-d4a0608cf59a",
   "arm_pin_hash": null,
-  "mock_ble": true,
+  "mock_ble": false,
   "telegram_chat_id": null,
   "camera_enabled": true,
   "camera_interval_seconds": 30,
   "camera_max_photos": 20,
-  "camera_current_slot": 18
+  "camera_current_slot": 6
 }

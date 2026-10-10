@@ -27,6 +27,7 @@ import threading
 import webbrowser
 import ctypes
 from pathlib import Path
+from typing import Optional
 
 # ── Ensure DashBoard1 root is on sys.path ──────────────────────────────────
 _HERE = Path(__file__).resolve().parent
@@ -81,6 +82,8 @@ class NodeXApp:
     def __init__(self, mock_ble: bool = False, no_tray: bool = False) -> None:
         if mock_ble:
             settings.mock_ble = True
+        else:
+            settings.mock_ble = False
 
         self._no_tray = no_tray
         self._loop: asyncio.AbstractEventLoop | None = None

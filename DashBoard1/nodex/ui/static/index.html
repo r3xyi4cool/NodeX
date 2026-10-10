@@ -976,15 +976,22 @@ function doAction(action) {
 /* ── Scanning ── */
 let selectedDevice = null;
 async function doScan() {
-  document.getElementById('scanStatus').textContent = 'Scanning…';
+  document.getElementById('scanStatus').textContent = 'Scanning… (8s)';
   document.getElementById('btnScan').disabled = true;
   document.getElementById('deviceList').innerHTML = '';
   selectedDevice = null;
   try {
     const resp = await fetch('/api/pair/scan', { method: 'POST' });
     const data = await resp.json();
-    renderDevices(data.devices || []);
-    document.getElementById('scanStatus').textContent = `Found ${data.devices?.length ?? 0} devices`;
+    const devices = data.devices || [];
+    const esp32Count = devices.filter(d => d.likely_esp32).length;
+    const statusMsg = devices.length === 0
+      ? 'No devices found'
+      : esp32Count > 0
+        ? `Found ${devices.length} device(s) — ${esp32Count} likely ESP32`
+        : `Found ${devices.length} device(s) — none matched ESP32 name`;
+    renderDevices(devices);
+    document.getElementById('scanStatus').textContent = statusMsg;
   } catch(e) {
     document.getElementById('scanStatus').textContent = 'Scan failed';
     showToast('Scan error: ' + e.message, 'error');
@@ -996,15 +1003,18 @@ function renderDevices(devices) {
   const list = document.getElementById('deviceList');
   list.innerHTML = '';
   if (!devices.length) {
-    list.innerHTML = '<div style="color:var(--text-dim);font-size:.8rem;padding:8px">No devices found</div>';
+    list.innerHTML = '<div style="color:var(--text-dim);font-size:.8rem;padding:8px">No devices found. Make sure ESP32 is powered and advertising.</div>';
     return;
   }
   devices.forEach(d => {
     const item = document.createElement('div');
     item.className = 'device-item';
+    const esp32Badge = d.likely_esp32
+      ? `<span style="font-size:.6rem;padding:2px 6px;border-radius:4px;background:rgba(74,222,128,.15);color:var(--green);border:1px solid rgba(74,222,128,.3);font-family:var(--font-mono);flex-shrink:0">ESP32 ✓</span>`
+      : '';
     item.innerHTML = `
-      <div>
-        <div class="device-name">${d.name || 'Unknown'}</div>
+      <div style="flex:1;min-width:0">
+        <div class="device-name" style="display:flex;align-items:center;gap:6px">${d.name || 'Unknown'} ${esp32Badge}</div>
         <div class="device-addr">${d.address}</div>
       </div>
       <div class="device-rssi">${d.rssi ?? '—'} dBm</div>`;

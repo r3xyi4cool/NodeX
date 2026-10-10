@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS public.alerts (
     laptop_id       UUID REFERENCES public.laptops(id) ON DELETE SET NULL,
     event_type      TEXT,
     alert_type      TEXT,                   -- 'telegram', 'email', …
+    original_event  TEXT,                   -- the security event that triggered this alert
     success         BOOLEAN,
     error           TEXT,
     created_at      TIMESTAMPTZ DEFAULT NOW()

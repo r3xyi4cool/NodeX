@@ -111,7 +111,7 @@ class TelegramAlert(AlertChannel):
             error_msg = str(exc)
             logger.warning("Telegram send failed: %s", exc)
 
-        # Record in local queue (alerts table if exists, else events)
+        # Record in local alerts queue (separate table — avoids polluting events table)
         self._queue.enqueue({
             "event_type": "ALERT_TELEGRAM",
             "alert_type": "telegram",
@@ -119,7 +119,7 @@ class TelegramAlert(AlertChannel):
             "success": success,
             "error": error_msg,
             "timestamp": datetime.now(timezone.utc).isoformat(),
-        })
+        }, table="alerts")
 
         return success
 
