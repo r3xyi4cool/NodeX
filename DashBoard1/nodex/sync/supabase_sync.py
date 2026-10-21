@@ -201,6 +201,17 @@ class SupabaseSync:
             except Exception as exc2:
                 logger.warning("Laptop registration error: %s", exc2)
 
+        if not self._laptop_id and self._client:
+            try:
+                chk = self._client.table("laptops").select("id").eq("fingerprint", fingerprint).execute()
+                if chk.data and len(chk.data) > 0:
+                    laptop_id = str(chk.data[0]["id"])
+                    settings.laptop_id = laptop_id
+                    self._laptop_id = laptop_id
+                    logger.info("Found existing registered laptop id=%s", laptop_id)
+            except Exception as chk_err:
+                logger.debug("Laptop ID resolution note: %s", chk_err)
+
     # ------------------------------------------------------------------
     # Sync loop
     # ------------------------------------------------------------------
@@ -453,3 +464,113 @@ class SupabaseSync:
         except Exception as exc:
             logger.warning("Failed to upload capture slot %d: %s", slot, exc)
             return None
+
+    # ------------------------------------------------------------------
+    # Location tracking & history synchronization
+    # ------------------------------------------------------------------
+
+    async def sync_location(
+        self,
+        sync_event: str = "PERIODIC_SYNC",
+        image_url: Optional[str] = None,
+    ) -> Optional[dict]:
+        """
+        Retrieves the physical laptop location and sends it to Supabase.
+        Records location in 'locations' table (or 'heartbeats' as resilient fallback).
+        Also associates with image_url if captured alongside webcam surveillance.
+        Updates the laptop's latest location in 'laptops' table.
+        Non-blocking, graceful error handling, does not fabricate fake coordinates.
+        """
+        try:
+            from nodex.collector.location import get_current_location
+
+            loc = await get_current_location(timeout=4.5)
+            if not loc or loc.get("latitude") is None or loc.get("longitude") is None:
+                logger.debug("Location sync skipped: no valid coordinates obtained")
+                return None
+
+            now_iso = datetime.now(timezone.utc).isoformat()
+            loc_record = {
+                "latitude": loc["latitude"],
+                "longitude": loc["longitude"],
+                "accuracy": loc.get("accuracy"),
+                "altitude": loc.get("altitude"),
+                "source": loc.get("source", "unknown"),
+                "city": loc.get("city"),
+                "region": loc.get("region"),
+                "country": loc.get("country"),
+                "country_code": loc.get("country_code"),
+                "ip": loc.get("ip"),
+                "sync_event": sync_event,
+                "image_url": image_url,
+                "metadata": {
+                    "security_mode": self._monitor.state.name,
+                    "mock_ble": settings.mock_ble,
+                    "ble_connected": self._monitor._ble.connected,
+                    "display_name": loc.get("display_name"),
+                },
+                "timestamp": loc.get("timestamp") or now_iso,
+            }
+
+            # Enqueue locally for offline trail
+            try:
+                self._queue.enqueue_heartbeat({
+                    "event_type": f"LOC_{sync_event}",
+                    "security_mode": self._monitor.state.name,
+                    "location": loc_record,
+                    "created_at": now_iso,
+                })
+            except Exception as q_err:
+                logger.debug("Local queue location enqueue note: %s", q_err)
+
+            # Ensure Supabase authenticated
+            ok = await self._ensure_auth()
+            if not ok or not self._client or not self._laptop_id:
+                logger.debug("Location enqueued locally (Supabase unauthenticated/offline)")
+                return loc_record
+
+            # 1. Attempt insert into dedicated 'locations' table
+            location_saved = False
+            try:
+                loc_payload = {
+                    "laptop_id": self._laptop_id,
+                    "created_at": now_iso,
+                    **loc_record,
+                }
+                res = self._client.table("locations").insert(loc_payload).execute()
+                if res.data:
+                    location_saved = True
+                    logger.info("Location record persisted to Supabase locations table (%s)", sync_event)
+            except Exception as loc_tbl_err:
+                logger.debug("locations table insert note: %s — using heartbeats history fallback", loc_tbl_err)
+
+            # 2. Resilient fallback: store in 'heartbeats' table so history is ALWAYS recorded
+            if not location_saved:
+                try:
+                    hb_payload = {
+                        "laptop_id": self._laptop_id,
+                        "event_type": "LOCATION_SYNC",
+                        "security_mode": self._monitor.state.name,
+                        "location": loc_record,
+                        "created_at": now_iso,
+                    }
+                    self._client.table("heartbeats").insert(hb_payload).execute()
+                    logger.info("Location record persisted to Supabase heartbeats history (%s)", sync_event)
+                except Exception as hb_err:
+                    logger.warning("Failed to record location history to Supabase: %s", hb_err)
+
+            # 3. Update 'laptops' table with latest location
+            try:
+                self._client.table("laptops").update({
+                    "location": loc_record,
+                    "last_seen": now_iso,
+                }).eq("id", self._laptop_id).execute()
+            except Exception as lap_err:
+                logger.debug("Laptops table location update note: %s", lap_err)
+
+            return loc_record
+
+        except Exception as exc:
+            logger.warning("sync_location encountered error: %s", exc)
+            return None
+

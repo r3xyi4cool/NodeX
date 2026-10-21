@@ -46,12 +46,15 @@ class NodeXUIServer:
         queue: "EventQueue",
         alert_manager: "AlertManager",
         camera: Optional[object] = None,
+        sync: Optional[object] = None,
     ) -> None:
         self._ble = ble
         self._monitor = monitor
         self._queue = queue
         self._alert_manager = alert_manager
         self._camera = camera
+        self._sync = sync
+        self._location_lock = asyncio.Lock()
         self._ws_clients: Set[WebSocket] = set()
         self._server: Optional[uvicorn.Server] = None
         self.app = self._build_app()
@@ -206,6 +209,37 @@ class NodeXUIServer:
                 if photo:
                     return {"ok": True, "slot": photo["slot"], "url": f"/captures/photo_{photo['slot']}.jpg"}
             return {"ok": False, "error": "Camera not available"}
+
+        # -- Manual Location Sending API --
+        @app.post("/api/location/send")
+        async def api_send_location():
+            """
+            Manually retrieve and send the current physical laptop location to Supabase immediately.
+            Guards against duplicate clicks using an asyncio lock.
+            Independent of camera capture and ESP32 BLE status. Works in Demo Mode.
+            """
+            if not self._sync or not hasattr(self._sync, "sync_location"):
+                raise HTTPException(status_code=503, detail="Sync engine unavailable")
+
+            if self._location_lock.locked():
+                raise HTTPException(status_code=409, detail="Location submission already in progress. Please wait.")
+
+            async with self._location_lock:
+                try:
+                    loc = await self._sync.sync_location(sync_event="MANUAL_SEND", image_url=None)
+                    if not loc or loc.get("latitude") is None or loc.get("longitude") is None:
+                        raise HTTPException(status_code=502, detail="Failed to acquire valid laptop location coordinates")
+
+                    return {
+                        "ok": True,
+                        "location": loc,
+                        "message": f"Location sent: {loc.get('city') or 'Point'} ({loc['latitude']:.4f}, {loc['longitude']:.4f})",
+                    }
+                except HTTPException:
+                    raise
+                except Exception as exc:
+                    logger.warning("Manual location send error: %s", exc)
+                    raise HTTPException(status_code=500, detail=str(exc))
 
         return app
 

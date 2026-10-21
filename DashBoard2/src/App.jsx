@@ -14,6 +14,7 @@ import { Events } from './pages/Events';
 import { Captures } from './pages/Captures';
 import { Alerts } from './pages/Alerts';
 import { Stats } from './pages/Stats';
+import { Map } from './pages/Map';
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -88,6 +89,7 @@ export default function App() {
             >
               <Routes>
                 <Route path="/" element={<Overview onOpenLightbox={openLightbox} />} />
+                <Route path="/map" element={<Map onOpenLightbox={openLightbox} />} />
                 <Route path="/laptop" element={<Laptop />} />
                 <Route path="/token" element={<Token />} />
                 <Route path="/events" element={<Events />} />

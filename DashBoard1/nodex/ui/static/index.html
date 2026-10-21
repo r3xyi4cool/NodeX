@@ -244,6 +244,9 @@
     .btn-scan:hover  { background: rgba(34,211,238,.18); border-color: var(--cyan); }
     .btn-save  { background: rgba(34,211,238,.08); color: var(--cyan);  border-color: rgba(34,211,238,.25); }
     .btn-save:hover  { background: rgba(34,211,238,.18); border-color: var(--cyan); }
+    .btn-loc   { background: rgba(34,211,238,.1); color: var(--cyan); border-color: rgba(34,211,238,.3); }
+    .btn-loc:hover   { background: rgba(34,211,238,.2); border-color: var(--cyan); box-shadow: 0 0 16px rgba(34,211,238,.25); }
+    .btn-loc.sending { opacity: .85; cursor: wait; border-color: var(--amber); color: var(--amber); background: rgba(251,191,36,.12); }
     .btn:disabled { opacity: .35; cursor: not-allowed; pointer-events: none; }
 
     /* PIN input */
@@ -546,6 +549,7 @@
         <button class="btn btn-arm"    id="btnArm"    onclick="doAction('arm')">🛡 Arm System</button>
         <button class="btn btn-disarm" id="btnDisarm" onclick="doAction('disarm')">🔓 Disarm</button>
         <button class="btn btn-test"   id="btnTest"   onclick="doAction('test')">⚡ Security Test</button>
+        <button class="btn btn-loc"    id="btnSendLoc" onclick="doSendLocation()">📍 Send Location</button>
       </div>
     </div>
 
@@ -971,6 +975,55 @@ function clearLog() {
 function doAction(action) {
   const pin = document.getElementById('quickPin').value || '';
   send({ action, pin });
+}
+
+/* ── Manual Location Sending ── */
+let _locationSending = false;
+async function doSendLocation() {
+  if (_locationSending) return;
+  const btn = document.getElementById('btnSendLoc');
+  if (!btn) return;
+
+  _locationSending = true;
+  btn.disabled = true;
+  btn.classList.add('sending');
+  const originalHtml = '📍 Send Location';
+
+  try {
+    btn.innerHTML = '⏳ Retrieving location…';
+    showToast('📍 Acquiring current laptop coordinates…', 'info');
+
+    const resp = await fetch('/api/location/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    const data = await resp.json();
+    if (resp.ok && data.ok) {
+      const loc = data.location || {};
+      const coordStr = `${loc.latitude?.toFixed(4)}, ${loc.longitude?.toFixed(4)}`;
+      const placeStr = loc.city ? `${loc.city} (${coordStr})` : coordStr;
+      btn.innerHTML = '✓ Location Sent!';
+      showToast(`📍 Location recorded: ${placeStr}`, 'success');
+      addLog('LOCATION', `Manual location recorded: ${placeStr} [${loc.source || 'GPS'}]`, 'ev-armed');
+    } else {
+      const errMsg = data.detail || data.error || 'Failed to retrieve location';
+      btn.innerHTML = '✕ Failed';
+      showToast(`✕ ${errMsg}`, 'error');
+      addLog('LOC_ERR', `Manual location error: ${errMsg}`, 'ev-security');
+    }
+  } catch (err) {
+    btn.innerHTML = '✕ Network Error';
+    showToast(`✕ Network error: ${err.message}`, 'error');
+    addLog('LOC_ERR', `Network error sending location: ${err.message}`, 'ev-security');
+  } finally {
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.classList.remove('sending');
+      btn.innerHTML = originalHtml;
+      _locationSending = false;
+    }, 3000);
+  }
 }
 
 /* ── Scanning ── */

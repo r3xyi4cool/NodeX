@@ -221,12 +221,67 @@ def seed_demo_data():
             "captured_at": cap_time,
         }, on_conflict="laptop_id,slot").execute()
 
+    # 6. Seed Location History (using reference points from Tests/locations.txt)
+    print("[+] Seeding 5 historical location records...")
+    loc_points = [
+        {"name": "Home", "lat": 9.978725, "lon": 76.306276, "delta": 30, "acc": 85.0},
+        {"name": "College", "lat": 9.974950, "lon": 76.318420, "delta": 22, "acc": 95.0},
+        {"name": "Lulu Mall", "lat": 10.027950, "lon": 76.308350, "delta": 15, "acc": 110.0},
+        {"name": "Marine Drive", "lat": 9.984820, "lon": 76.274930, "delta": 8, "acc": 90.0},
+        {
+            "name": "Current Station",
+            "lat": snapshot.get("location", {}).get("latitude") or 9.9788,
+            "lon": snapshot.get("location", {}).get("longitude") or 76.3062,
+            "delta": 1,
+            "acc": 100.0,
+        },
+    ]
+
+    for p in loc_points:
+        p_time = (now - timedelta(minutes=p["delta"])).isoformat()
+        loc_obj = {
+            "latitude": p["lat"],
+            "longitude": p["lon"],
+            "accuracy": p["acc"],
+            "altitude": 10.0,
+            "source": "winrt",
+            "city": p["name"],
+            "region": "Kerala",
+            "country": "India",
+            "country_code": "IN",
+            "sync_event": "PERIODIC_SYNC",
+            "timestamp": p_time,
+        }
+
+        # Try locations table
+        try:
+            client.table("locations").insert({
+                "laptop_id": laptop_id,
+                "created_at": p_time,
+                **loc_obj,
+            }).execute()
+        except Exception:
+            pass
+
+        # Also store in heartbeats table history
+        try:
+            client.table("heartbeats").insert({
+                "laptop_id": laptop_id,
+                "event_type": "LOCATION_SYNC",
+                "security_mode": "ARMED",
+                "location": loc_obj,
+                "created_at": p_time,
+            }).execute()
+        except Exception:
+            pass
+
     print("\n[OK] SUCCESS: Demo data successfully seeded to Supabase!")
     print("    - 1 Laptop registered")
     print("    - 5 Heartbeats added")
     print("    - 8 Security Events added")
     print("    - 4 Captures uploaded to ring buffer")
     print("    - 2 Alerts logged")
+    print("    - 5 Historical locations seeded (OpenStreetMap)")
     print("\nYou can now open Dashboard 2 (http://localhost:5173) to see all live telemetry!")
 
 if __name__ == "__main__":

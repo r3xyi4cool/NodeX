@@ -1,11 +1,12 @@
 // Collapsible left navigation sidebar with mobile drawer and session controls
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { Shield, LayoutDashboard, Laptop, Cpu, Activity, Camera, Bell, BarChart2, LogOut, X } from 'lucide-react';
+import { Shield, LayoutDashboard, Laptop, Cpu, Activity, Camera, Bell, BarChart2, LogOut, X, MapPin } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 
 const NAV_ITEMS = [
   { to: '/', label: 'Overview', icon: LayoutDashboard },
+  { to: '/map', label: 'Map', icon: MapPin },
   { to: '/laptop', label: 'Laptop Data', icon: Laptop },
   { to: '/token', label: 'ESP32 Token', icon: Cpu },
   { to: '/events', label: 'Security Events', icon: Activity },

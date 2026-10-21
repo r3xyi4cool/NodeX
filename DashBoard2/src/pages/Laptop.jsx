@@ -1,5 +1,6 @@
 // Registered laptop telemetry view with hardware specs, SSD, RAM, CPU, GPU, Display and Location
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Laptop as LaptopIcon, Battery, Wifi, Shield, Hash,
   Cpu, HardDrive, Monitor, MapPin, Zap
@@ -122,7 +123,12 @@ export function Laptop() {
                   <div className="text-xs font-bold text-slate-800 dark:text-white truncate" title={locText}>
                     {locText}
                   </div>
-                  <span className="text-[11px] text-slate-400 mt-1 block">IP: {loc.ip || hb?.network_ip || 'Private/Wi-Fi'}</span>
+                  <div className="flex items-center justify-between mt-1 text-[11px]">
+                    <span className="text-slate-400">IP: {loc.ip || hb?.network_ip || 'Private/Wi-Fi'}</span>
+                    <Link to="/map" className="text-cyan-600 dark:text-cyan-400 font-bold hover:underline">
+                      View Map →
+                    </Link>
+                  </div>
                 </div>
 
                 {/* 2. Battery */}

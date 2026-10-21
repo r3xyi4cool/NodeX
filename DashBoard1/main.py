@@ -97,7 +97,7 @@ class NodeXApp:
         self.sync    = SupabaseSync(self.queue, self.monitor)
         self.alerts  = AlertManager(self.queue)
         self.camera  = CameraManager()
-        self.ui      = NodeXUIServer(self.ble, self.monitor, self.queue, self.alerts, camera=self.camera)
+        self.ui      = NodeXUIServer(self.ble, self.monitor, self.queue, self.alerts, camera=self.camera, sync=self.sync)
         self.tray    = TrayApp(self.monitor, settings.ui_port) if not no_tray else None
 
         # Wire alerts and camera snap to monitor security events
@@ -260,21 +260,34 @@ class NodeXApp:
                 logger.warning("[DEMO] Simulation loop error: %s", exc)
 
     async def _camera_loop(self) -> None:
-        """Periodic 30-second camera capture loop with 20-photo circular buffer."""
+        """Periodic 30-second webcam surveillance and physical location synchronization cycle."""
         from nodex.monitor.state import SecurityState
-        logger.info("Webcam surveillance loop active (every %d s)", settings.camera_interval_seconds)
+        logger.info("Webcam & location synchronization loop active (every %d s)", settings.camera_interval_seconds)
         while True:
             try:
                 await asyncio.sleep(settings.camera_interval_seconds)
-                # Only capture when armed or under security event/lock to respect privacy when DISARMED
-                if self.monitor.state != SecurityState.DISARMED:
-                    photo = await self.camera.capture_next()
-                    if photo:
-                        await self.sync.upload_capture(photo)
+
+                # 1. Capture webcam photo when armed/locked or in demo mode
+                image_url: Optional[str] = None
+                if self.monitor.state != SecurityState.DISARMED or settings.mock_ble:
+                    try:
+                        photo = await self.camera.capture_next()
+                        if photo:
+                            image_url = await self.sync.upload_capture(photo)
+                    except Exception as cam_err:
+                        logger.warning("Camera snapshot error during 30s cycle: %s", cam_err)
+
+                # 2. Retrieve & sync physical location alongside image uploads (every 30s)
+                # Location failure does NOT interrupt image uploads and retries next cycle
+                try:
+                    await self.sync.sync_location(sync_event="PERIODIC_SYNC", image_url=image_url)
+                except Exception as loc_err:
+                    logger.warning("Location sync error during 30s cycle: %s", loc_err)
+
             except asyncio.CancelledError:
                 break
             except Exception as exc:
-                logger.warning("Camera surveillance loop error: %s", exc)
+                logger.warning("Periodic camera/location sync loop error: %s", exc)
 
     async def _stop_async(self) -> None:
         logger.info("Shutting down...")

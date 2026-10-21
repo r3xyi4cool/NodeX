@@ -48,15 +48,15 @@ def _get_cpu_brand() -> str:
 
 
 # ---------------------------------------------------------------------------
-# Location Cache (IP-based)
+# Location Cache
 # ---------------------------------------------------------------------------
 _LOCATION_CACHE: Optional[dict] = None
 _LOCATION_FETCHED_AT: float = 0.0
-_LOCATION_TTL = 300.0  # 5 minutes
+_LOCATION_TTL = 30.0  # 30 seconds cache to align with 30s sync interval
 
 
 async def _fetch_location() -> Optional[dict]:
-    """Fetch city-level location from ipapi.co. Returns cached or None on error."""
+    """Fetch current location from OS or network. Returns cached or None on error."""
     global _LOCATION_CACHE, _LOCATION_FETCHED_AT
 
     now = time.monotonic()
@@ -64,36 +64,16 @@ async def _fetch_location() -> Optional[dict]:
         return _LOCATION_CACHE
 
     try:
-        import httpx
-
-        async with httpx.AsyncClient(timeout=4.0) as client:
-            resp = await client.get("https://ipapi.co/json/")
-            resp.raise_for_status()
-            data = resp.json()
-
-        _LOCATION_CACHE = {
-            "ip": data.get("ip"),
-            "city": data.get("city") or "Unknown City",
-            "region": data.get("region") or "Unknown Region",
-            "country": data.get("country_name") or "Unknown Country",
-            "country_code": data.get("country_code"),
-            "latitude": data.get("latitude"),
-            "longitude": data.get("longitude"),
-            "source": "ipapi.co",
-        }
-        _LOCATION_FETCHED_AT = now
-        logger.debug("Location fetched: %s, %s", _LOCATION_CACHE["city"], _LOCATION_CACHE["country"])
-        return _LOCATION_CACHE
-
+        from nodex.collector.location import get_current_location
+        loc = await get_current_location(timeout=4.0)
+        if loc:
+            _LOCATION_CACHE = loc
+            _LOCATION_FETCHED_AT = now
+            return _LOCATION_CACHE
     except Exception as exc:
         logger.debug("Location fetch note: %s", exc)
-        return _LOCATION_CACHE or {
-            "city": "Bengaluru",
-            "region": "Karnataka",
-            "country": "India",
-            "country_code": "IN",
-            "ip": "Local / Wi-Fi",
-        }
+
+    return _LOCATION_CACHE
 
 
 # ---------------------------------------------------------------------------
