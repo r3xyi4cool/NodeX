@@ -11,6 +11,7 @@ import asyncio
 import ctypes
 import logging
 import time
+import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Callable, Optional
 
@@ -47,6 +48,18 @@ class SecurityMonitor:
         self._grace_start: Optional[float] = None
         self._bad_readings = 0
         self._grace_remaining: float = 0.0
+
+        # Disconnection alert & simulation state
+        self._active_incident_id: Optional[str] = None
+        self._alert_active: bool = False
+        self._simulation_active: bool = False
+        self._simulated_incident_id: Optional[str] = None
+
+        # Incident & alert callbacks
+        self.on_disconnection_incident: Optional[Callable[[dict], None]] = None
+        self.on_reconnected: Optional[Callable[[], None]] = None
+        self.on_simulation_ended: Optional[Callable[[], None]] = None
+        self.on_alert_silenced: Optional[Callable[[], None]] = None
 
         self._task: Optional[asyncio.Task] = None
         self._stop_event = asyncio.Event()
@@ -114,17 +127,47 @@ class SecurityMonitor:
 
     def _on_ble_connected(self) -> None:
         logger.info("BLE connected event received by monitor")
+        if self._alert_active and not self._simulation_active:
+            self._alert_active = False
+            self._active_incident_id = None
+            if self.on_reconnected:
+                try:
+                    self.on_reconnected()
+                except Exception as e:
+                    logger.debug("on_reconnected callback error: %s", e)
+
         if self.state in (SecurityState.BLE_LOST, SecurityState.GRACE_PERIOD):
             logger.info("Token recovered during grace period!")
             self._bad_readings = 0
             self._grace_start = None
             self._transition(SecurityState.RECOVERED, event_type="TOKEN_RECOVERED")
-            # After a brief pause, return to ARMED
             asyncio.get_event_loop().call_later(
                 1.0, lambda: self._transition(SecurityState.ARMED, event_type=None)
             )
 
     def _on_ble_disconnected(self) -> None:
+        logger.warning("BLE disconnected event received by monitor")
+        if not self._alert_active and not self._simulation_active:
+            self._alert_active = True
+            inc_id = f"inc-{uuid.uuid4().hex[:8]}"
+            self._active_incident_id = inc_id
+            incident = {
+                "incident_id": inc_id,
+                "event_type": "BLE_LOST",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "is_simulation": False,
+                "rssi": self._ble.rssi,
+                "rssi_smooth": self._ble.rssi_smooth,
+                "ble_connected": False,
+                "state_before": self.state.name,
+                "state_after": SecurityState.BLE_LOST.name,
+            }
+            if self.on_disconnection_incident:
+                try:
+                    self.on_disconnection_incident(incident)
+                except Exception as e:
+                    logger.debug("on_disconnection_incident callback error: %s", e)
+
         if self.state == SecurityState.ARMED:
             logger.warning("BLE lost while ARMED — starting bad-reading count")
 
@@ -201,6 +244,113 @@ class SecurityMonitor:
             self.on_state_change(self._build_status())
 
     # ------------------------------------------------------------------
+    # Disconnection Simulation (Demo Hotkey Support)
+    # ------------------------------------------------------------------
+
+    @property
+    def alert_active(self) -> bool:
+        return self._alert_active
+
+    @property
+    def simulation_active(self) -> bool:
+        return self._simulation_active
+
+    @property
+    def active_incident_id(self) -> Optional[str]:
+        return self._simulated_incident_id if self._simulation_active else self._active_incident_id
+
+    @property
+    def simulated_incident_id(self) -> Optional[str]:
+        return self._simulated_incident_id
+
+    @property
+    def last_incident_time(self) -> Optional[str]:
+        return self._last_incident_time
+
+    def simulate_disconnection(self) -> dict:
+        """
+        Simulate a beacon disconnection in both Demo Mode and Real Mode.
+        Works without modifying actual BLE connection state in Real Mode.
+        Guards against duplicate incident triggers while simulation is active.
+        """
+        if self._simulation_active and self._simulated_incident_id:
+            logger.warning("Disconnection simulation already active — returning current incident")
+            return {
+                "incident_id": self._simulated_incident_id,
+                "is_simulation": True,
+                "simulated": True,
+                "already_active": True,
+            }
+
+        self._simulation_active = True
+        self._alert_active = True
+        sim_id = f"sim-{uuid.uuid4().hex[:8]}"
+        self._simulated_incident_id = sim_id
+
+        sim_incident = {
+            "incident_id": sim_id,
+            "event_type": "SIMULATED_BLE_LOST",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "is_simulation": True,
+            "simulated": True,
+            "rssi": self._ble.rssi if not settings.mock_ble else -85,
+            "rssi_smooth": self._ble.rssi_smooth if not settings.mock_ble else -82.4,
+            "ble_connected": self._ble.connected,
+            "state_before": self.state.name,
+            "state_after": "SIMULATED_DISCONNECT",
+            "metadata": {"simulated": True, "is_simulation": True},
+        }
+
+        logger.info("[DEMO HOTKEY] Triggered simulated disconnection alert (id=%s)", sim_id)
+        if self.on_disconnection_incident:
+            try:
+                self.on_disconnection_incident(sim_incident)
+            except Exception as e:
+                logger.debug("on_disconnection_incident error for simulation: %s", e)
+
+        if self.on_state_change:
+            self.on_state_change(self._build_status())
+
+        return sim_incident
+
+    def end_simulation(self) -> bool:
+        """
+        End the active simulated disconnection and return to normal monitoring.
+        Does not falsely report physical reconnection.
+        """
+        if not self._simulation_active:
+            return False
+
+        logger.info("[DEMO HOTKEY] Ending simulated disconnection (id=%s)", self._simulated_incident_id)
+        self._simulation_active = False
+        self._alert_active = False
+        self._simulated_incident_id = None
+
+        if self.on_simulation_ended:
+            try:
+                self.on_simulation_ended()
+            except Exception as e:
+                logger.debug("on_simulation_ended callback error: %s", e)
+
+        if self.on_state_change:
+            self.on_state_change(self._build_status())
+
+        return True
+
+    def silence_alert(self) -> bool:
+        """Acknowledge and silence the warning sound for active alert without faking reconnection."""
+        logger.info("Alert silenced by user PIN verification")
+        self._alert_active = False
+        if self.on_alert_silenced:
+            try:
+                self.on_alert_silenced()
+            except Exception as e:
+                logger.debug("on_alert_silenced callback error: %s", e)
+        if self.on_state_change:
+            self.on_state_change(self._build_status())
+        return True
+
+    # ------------------------------------------------------------------
     # Security event
     # ------------------------------------------------------------------
 
@@ -263,5 +413,8 @@ class SecurityMonitor:
             "esp32_battery": self._ble.device_battery,
             "grace_period": settings.grace_period_seconds,
             "rssi_threshold": settings.rssi_threshold,
+            "alert_active": self._alert_active or self._simulation_active,
+            "simulation_active": self._simulation_active,
+            "active_incident_id": self._simulated_incident_id if self._simulation_active else self._active_incident_id,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }

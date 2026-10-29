@@ -405,6 +405,83 @@
 
     .blink { animation: blink 1s infinite; }
 
+    /* ── Full-Screen Connection Lost Red Alert ──────────────────────── */
+    .conn-lost-overlay {
+      position: fixed; inset: 0; z-index: 99999;
+      background: radial-gradient(circle at center, rgba(185,28,28,.97) 0%, rgba(127,29,29,.98) 70%, rgba(69,10,10,1) 100%);
+      display: none; flex-direction: column; align-items: center; justify-content: center;
+      padding: 30px; color: #fff; text-align: center;
+      animation: alertPulse 1.2s infinite alternate ease-in-out;
+      backdrop-filter: blur(12px);
+    }
+    .conn-lost-overlay.active { display: flex; }
+    @keyframes alertPulse {
+      0% { box-shadow: inset 0 0 60px rgba(0,0,0,.85); }
+      100% { box-shadow: inset 0 0 140px rgba(239,68,68,.95); }
+    }
+    .conn-lost-box {
+      background: rgba(15,23,42,.92);
+      border: 2px solid #ef4444; border-radius: 20px;
+      padding: 36px 40px; max-width: 660px; width: 100%;
+      box-shadow: 0 25px 70px rgba(0,0,0,.85), 0 0 50px rgba(239,68,68,.6);
+      display: flex; flex-direction: column; gap: 18px;
+    }
+    .conn-lost-title {
+      font-size: 2.6rem; font-weight: 900; letter-spacing: .06em;
+      color: #f87171; text-shadow: 0 0 25px rgba(248,113,113,.9);
+      margin-bottom: 2px; display: flex; align-items: center; justify-content: center; gap: 14px;
+    }
+    .conn-lost-details {
+      background: rgba(30,41,59,.75); border-radius: 12px;
+      border: 1px solid rgba(239,68,68,.35); padding: 14px 18px;
+      text-align: left; font-family: var(--font-mono); font-size: .8rem;
+      display: flex; flex-direction: column; gap: 7px;
+    }
+    .conn-lost-sim-badge {
+      display: inline-block; background: rgba(245,158,11,.2);
+      border: 1px solid #f59e0b; color: #fbbf24; padding: 4px 10px;
+      border-radius: 6px; font-weight: 700; font-size: .75rem;
+      text-transform: uppercase; letter-spacing: .05em; align-self: center;
+    }
+    .conn-lost-upload-status {
+      padding: 8px 12px; border-radius: 8px; font-size: .8rem; font-weight: 600;
+      display: flex; align-items: center; justify-content: center; gap: 8px; font-family: var(--font-mono);
+    }
+    .upload-status-pending { background: rgba(251,191,36,.18); color: #fbbf24; border: 1px solid rgba(251,191,36,.35); }
+    .upload-status-success { background: rgba(74,222,128,.18); color: #4ade80; border: 1px solid rgba(74,222,128,.35); }
+    .upload-status-failed  { background: rgba(248,113,113,.18); color: #f87171; border: 1px solid rgba(248,113,113,.35); }
+    .btn-alert-action {
+      padding: 10px 16px; border-radius: var(--radius-md); font-weight: 600; font-size: .85rem;
+      cursor: pointer; border: 1px solid transparent; transition: all .2s;
+    }
+    .btn-alert-silence { background: rgba(251,191,36,.18); color: #fbbf24; border-color: rgba(251,191,36,.4); }
+    .btn-alert-silence:hover { background: rgba(251,191,36,.28); border-color: #fbbf24; }
+    .btn-alert-end-sim { background: rgba(148,163,184,.15); color: #cbd5e1; border-color: rgba(148,163,184,.3); }
+    .btn-alert-end-sim:hover { background: rgba(148,163,184,.25); border-color: #cbd5e1; }
+
+    /* ── Upload All Button & Indicators ──────────────────────────────── */
+    .btn-upload-all {
+      background: linear-gradient(135deg, rgba(34,211,238,.18) 0%, rgba(59,130,246,.18) 100%);
+      border: 1px solid var(--cyan); color: #e2e8f0; font-weight: 700;
+      letter-spacing: .02em; padding: 12px 18px; border-radius: var(--radius-md);
+      cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
+      transition: all .25s; box-shadow: 0 0 16px rgba(34,211,238,.15);
+      width: 100%; font-size: .85rem;
+    }
+    .btn-upload-all:hover {
+      background: linear-gradient(135deg, rgba(34,211,238,.3) 0%, rgba(59,130,246,.3) 100%);
+      box-shadow: 0 0 24px rgba(34,211,238,.35); transform: translateY(-1px);
+    }
+    .btn-upload-all:disabled { opacity: .5; cursor: wait; pointer-events: none; }
+    .upload-all-card {
+      margin-top: 14px; background: rgba(17,24,39,.65);
+      border: 1px solid var(--border); border-radius: var(--radius-md); padding: 16px;
+    }
+    .upload-status-badge {
+      padding: 4px 10px; border-radius: 6px; font-size: .75rem; font-weight: 600;
+      display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono);
+    }
+
     /* ── Modal (PIN prompt) ─────────────────────────────────────────── */
     .modal-bg {
       position: fixed; inset: 0; z-index: 100;
@@ -450,6 +527,61 @@
   </style>
 </head>
 <body class="s-disarmed">
+
+<!-- Full-Screen Connection Lost Alert Overlay -->
+<div class="conn-lost-overlay" id="connLostOverlay">
+  <div class="conn-lost-box">
+    <div class="conn-lost-title">
+      <span>🚨</span>
+      <span>CONNECTION LOST</span>
+      <span>🚨</span>
+    </div>
+    <div id="connLostSimBadge" class="conn-lost-sim-badge" style="display:none">
+      SIMULATED DISCONNECTION — PHYSICAL HARDWARE UNTOUCHED
+    </div>
+    <div style="font-size:.9rem;color:#fca5a5;margin-bottom:4px">
+      BLE token signal was lost. Immediate security alert initiated.
+    </div>
+    <div class="conn-lost-details">
+      <div><strong>Event Time:</strong> <span id="alertEventTime">—</span></div>
+      <div><strong>Incident ID:</strong> <span id="alertIncidentId">—</span></div>
+      <div><strong>Last Known Location:</strong> <span id="alertLocation">—</span></div>
+      <div><strong>Upload Status:</strong> <span id="alertUploadStatusText" class="upload-status-badge upload-status-pending">Uploading to Supabase…</span></div>
+    </div>
+    <div style="background:rgba(15,23,42,.7);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:10px">
+      <div style="font-size:.78rem;color:#cbd5e1;font-weight:600">Enter PIN to silence alert sound:</div>
+      <div style="display:flex;gap:10px;align-items:center">
+        <input type="password" id="alertPinInput" class="pin-input" placeholder="Session PIN" style="flex:1"/>
+        <button class="btn-alert-action btn-alert-silence" onclick="silenceAlertWithPin()">🔕 Silence Alert</button>
+      </div>
+      <div id="alertPinError" style="font-size:.75rem;min-height:16px"></div>
+    </div>
+    <div style="display:flex;gap:12px;justify-content:center;margin-top:6px">
+      <button class="btn-alert-action btn-alert-end-sim" id="btnEndSimulation" onclick="endSimulation()" style="display:none">
+        ⏹ End Simulation
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- PIN Setup Modal -->
+<div class="modal-bg" id="pinSetupModal">
+  <div class="modal">
+    <h3>🔐 Set Session Security PIN</h3>
+    <p style="font-size:.75rem;color:var(--text-secondary);margin-bottom:12px">
+      No PIN configured in memory. Set a PIN (min 4 characters) to arm. Kept in volatile RAM only (never written to disk or Supabase).
+    </p>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <input type="password" class="pin-input" id="setupPin1" placeholder="New PIN (min 4 chars)" style="width:100%"/>
+      <input type="password" class="pin-input" id="setupPin2" placeholder="Confirm PIN" style="width:100%"/>
+      <div id="pinSetupError" style="color:var(--red);font-size:.75rem;min-height:16px"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-cancel" onclick="closePinSetupModal()">Cancel</button>
+      <button class="btn btn-arm" onclick="confirmPinSetup()">Set PIN & Arm</button>
+    </div>
+  </div>
+</div>
 
 <!-- PIN Modal -->
 <div class="modal-bg" id="pinModal">
@@ -550,6 +682,7 @@
         <button class="btn btn-disarm" id="btnDisarm" onclick="doAction('disarm')">🔓 Disarm</button>
         <button class="btn btn-test"   id="btnTest"   onclick="doAction('test')">⚡ Security Test</button>
         <button class="btn btn-loc"    id="btnSendLoc" onclick="doSendLocation()">📍 Send Location</button>
+        <button class="btn btn-upload-all" id="btnUploadAll" onclick="doUploadAllData()">☁ Upload All Data to Supabase</button>
       </div>
     </div>
 
@@ -705,6 +838,28 @@
           <div class="conn-dot" id="syncDot" style="background:var(--text-dim)"></div>
           <span id="syncBadgeLabel">Unknown</span>
         </div>
+
+        <!-- Manual Upload All Section -->
+        <div class="upload-all-card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+            <div>
+              <div style="font-weight:600;font-size:.85rem;color:var(--text-primary)">Manual Supabase Synchronization</div>
+              <div style="font-size:.72rem;color:var(--text-secondary)">Flushes queues, uploads telemetry, location & photos, and verifies Supabase storage.</div>
+            </div>
+            <button class="btn btn-upload-all" id="btnUploadAllTab" onclick="doUploadAllData()" style="width:auto;padding:8px 16px;font-size:.78rem">
+              ☁ Upload All Data to Supabase
+            </button>
+          </div>
+          <div class="upload-status-indicator">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="color:var(--text-dim)">Status:</span>
+              <span id="uploadAllStatusBadge" class="upload-status-badge upload-status-pending">Ready to Upload</span>
+            </div>
+            <div id="uploadAllDetails" style="color:var(--text-secondary);font-size:.72rem;max-width:320px;overflow:hidden;text-overflow:ellipsis">
+              Awaiting upload trigger
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Captures tab (20-photo circular buffer) -->
@@ -803,6 +958,37 @@ function setWSStatus(live) {
 function handleMessage(d) {
   if (d.type === 'error') { showToast('⛔ ' + d.detail, 'error'); return; }
   if (d.type === 'pong') return;
+
+  // Incident & simulation broadcasts
+  if (d.type === 'disconnection_incident') {
+    showDisconnectionAlert(d.incident);
+    return;
+  }
+  if (d.type === 'reconnected') {
+    hideDisconnectionAlert();
+    showToast('✅ BLE Beacon reconnected', 'success');
+    addLog('RECONNECTED', `BLE beacon reconnected: ${d.beacon?.name || 'Device'}`, 'ev-armed');
+    return;
+  }
+  if (d.type === 'simulation_ended') {
+    hideDisconnectionAlert();
+    showToast('Simulation ended', 'info');
+    return;
+  }
+  if (d.type === 'alert_silenced') {
+    alarmSound.stop();
+    return;
+  }
+  if (d.type === 'upload_progress') {
+    const statusBadge = document.getElementById('uploadAllStatusBadge');
+    const detailsEl = document.getElementById('uploadAllDetails');
+    if (statusBadge) {
+      statusBadge.textContent = d.status;
+      statusBadge.className = 'upload-status-badge upload-status-pending';
+    }
+    if (detailsEl) detailsEl.textContent = 'In progress: ' + d.status;
+    return;
+  }
 
   // All status messages update UI
   if (d.state) updateState(d);
@@ -971,9 +1157,309 @@ function clearLog() {
   document.getElementById('eventLog').innerHTML = '';
 }
 
+/* ── Web Audio API Warning Sound ── */
+class AlarmSoundManager {
+  constructor() {
+    this.audioCtx = null;
+    this.intervalId = null;
+    this.isPlaying = false;
+  }
+
+  init() {
+    try {
+      if (!this.audioCtx) {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (AudioContext) {
+          this.audioCtx = new AudioContext();
+        }
+      }
+      if (this.audioCtx && this.audioCtx.state === 'suspended') {
+        this.audioCtx.resume();
+      }
+    } catch (e) {
+      console.warn('AudioContext init error', e);
+    }
+  }
+
+  start() {
+    if (this.isPlaying) return;
+    this.init();
+    if (!this.audioCtx) return;
+
+    this.isPlaying = true;
+    let highFreq = true;
+
+    const playBeep = () => {
+      if (!this.isPlaying || !this.audioCtx) return;
+      try {
+        if (this.audioCtx.state === 'suspended') this.audioCtx.resume();
+        const osc = this.audioCtx.createOscillator();
+        const gain = this.audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(highFreq ? 880 : 660, this.audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.25, this.audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.audioCtx.currentTime + 0.32);
+
+        osc.connect(gain);
+        gain.connect(this.audioCtx.destination);
+
+        osc.start();
+        osc.stop(this.audioCtx.currentTime + 0.35);
+        highFreq = !highFreq;
+      } catch (e) {
+        console.warn('Audio play error', e);
+      }
+    };
+
+    playBeep();
+    this.intervalId = setInterval(playBeep, 450);
+  }
+
+  stop() {
+    this.isPlaying = false;
+    if (this.intervalId) {
+      clearInterval(this.intervalId);
+      this.intervalId = null;
+    }
+  }
+}
+const alarmSound = new AlarmSoundManager();
+
+// Ensure audio context initializes on first user touch/click
+document.addEventListener('click', () => alarmSound.init(), { once: true });
+document.addEventListener('keydown', () => alarmSound.init(), { once: true });
+
+/* ── Hidden Demo Hotkey (Ctrl+Alt+D and Ctrl+Shift+D) ── */
+window.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey && e.altKey && (e.key === 'd' || e.key === 'D')) ||
+      (e.ctrlKey && e.shiftKey && (e.key === 'D' || e.key === 'd'))) {
+    e.preventDefault();
+    triggerDemoDisconnection();
+  }
+});
+
+async function triggerDemoDisconnection() {
+  try {
+    alarmSound.init();
+    const resp = await fetch('/api/demo/simulate-disconnect', { method: 'POST' });
+    const data = await resp.json();
+    if (data.ok) {
+      showDisconnectionAlert(data.incident);
+      addLog('SIMULATION', 'Hidden hotkey triggered simulated disconnection', 'ev-security');
+    }
+  } catch (err) {
+    console.error('Simulation trigger error', err);
+  }
+}
+
+async function endSimulation() {
+  try {
+    const resp = await fetch('/api/demo/end-simulation', { method: 'POST' });
+    const data = await resp.json();
+    if (data.ok) {
+      alarmSound.stop();
+      hideDisconnectionAlert();
+      showToast('Simulation ended — monitoring resumed', 'info');
+      addLog('SIM_END', 'Disconnection simulation ended', 'ev-armed');
+    }
+  } catch (err) {
+    showToast('Failed to end simulation: ' + err.message, 'error');
+  }
+}
+
+/* ── Full-Screen Alert Management ── */
+let _activeAlertIncident = null;
+function showDisconnectionAlert(incident = {}) {
+  _activeAlertIncident = incident;
+  alarmSound.start();
+
+  const overlay = document.getElementById('connLostOverlay');
+  if (!overlay) return;
+
+  const simBadge = document.getElementById('connLostSimBadge');
+  const btnEndSim = document.getElementById('btnEndSimulation');
+  const isSim = incident.is_simulation || incident.simulated || false;
+
+  if (simBadge) simBadge.style.display = isSim ? 'inline-block' : 'none';
+  if (btnEndSim) btnEndSim.style.display = isSim ? 'inline-block' : 'none';
+
+  document.getElementById('alertEventTime').textContent = incident.timestamp ? fmtTime(incident.timestamp) : new Date().toLocaleTimeString();
+  document.getElementById('alertIncidentId').textContent = incident.incident_id || 'INC-' + Date.now().toString(16).slice(-6);
+
+  const loc = incident.location;
+  if (loc && loc.latitude != null) {
+    document.getElementById('alertLocation').textContent = `${loc.city || 'Coordinates'}: ${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}`;
+  } else {
+    document.getElementById('alertLocation').textContent = 'Acquiring GPS / IP coordinates…';
+  }
+
+  const uploadSt = document.getElementById('alertUploadStatusText');
+  if (uploadSt) {
+    uploadSt.textContent = 'Uploading evidence to Supabase…';
+    uploadSt.className = 'upload-status-badge upload-status-pending';
+  }
+
+  overlay.classList.add('active');
+}
+
+function hideDisconnectionAlert() {
+  alarmSound.stop();
+  const overlay = document.getElementById('connLostOverlay');
+  if (overlay) overlay.classList.remove('active');
+  _activeAlertIncident = null;
+}
+
+async function silenceAlertWithPin() {
+  const pinInput = document.getElementById('alertPinInput');
+  const pin = pinInput ? pinInput.value.trim() : '';
+  const errEl = document.getElementById('alertPinError');
+  if (errEl) errEl.textContent = '';
+
+  try {
+    const resp = await fetch('/api/alert/silence', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin }),
+    });
+    const data = await resp.json();
+    if (resp.ok && data.ok) {
+      alarmSound.stop();
+      if (errEl) {
+        errEl.style.color = '#4ade80';
+        errEl.textContent = '✓ Alert silenced. (Security monitoring remains active)';
+      }
+      setTimeout(() => {
+        if (!_activeAlertIncident?.is_simulation) {
+          hideDisconnectionAlert();
+        }
+      }, 1500);
+      addLog('SILENCE', 'Alarm sound silenced via session PIN', 'ev-armed');
+    } else {
+      if (errEl) {
+        errEl.style.color = '#f87171';
+        errEl.textContent = data.detail || 'Incorrect PIN';
+      }
+    }
+  } catch (err) {
+    if (errEl) {
+      errEl.style.color = '#f87171';
+      errEl.textContent = 'Error: ' + err.message;
+    }
+  }
+}
+
+/* ── Upload All Data to Supabase ── */
+let _uploadAllRunning = false;
+async function doUploadAllData() {
+  if (_uploadAllRunning) return;
+  _uploadAllRunning = true;
+
+  const btnMain = document.getElementById('btnUploadAll');
+  const btnTab = document.getElementById('btnUploadAllTab');
+  const statusBadge = document.getElementById('uploadAllStatusBadge');
+  const detailsEl = document.getElementById('uploadAllDetails');
+
+  const setStatus = (statusText, cls = 'upload-status-pending') => {
+    if (statusBadge) {
+      statusBadge.textContent = statusText;
+      statusBadge.className = 'upload-status-badge ' + cls;
+    }
+    const busy = (statusText === 'Uploading Data' || statusText === 'Uploading Photos' || statusText === 'Verifying Upload');
+    if (btnMain) { btnMain.disabled = busy; btnMain.textContent = busy ? `⏳ ${statusText}…` : '☁ Upload All Data to Supabase'; }
+    if (btnTab) { btnTab.disabled = busy; btnTab.textContent = busy ? `⏳ ${statusText}…` : '☁ Upload All Data to Supabase'; }
+  };
+
+  try {
+    setStatus('Uploading Data', 'upload-status-pending');
+    if (detailsEl) detailsEl.textContent = 'Synchronizing laptop telemetry, location, queue, and photo buffer…';
+    showToast('☁ Immediate Supabase upload initiated…', 'info');
+
+    const resp = await fetch('/api/sync/upload-all', { method: 'POST' });
+    const data = await resp.json();
+
+    if (resp.ok && data.status === 'SUCCESS') {
+      setStatus('Upload Successful', 'upload-status-success');
+      if (detailsEl) {
+        detailsEl.textContent = `Telemetry: OK | Photos: ${data.photos_synced}/${data.photos_total} | Queue: ${data.events_synced} | Verified: YES`;
+      }
+      showToast('✅ All data successfully uploaded and verified in Supabase!', 'success');
+      addLog('UPLOAD_ALL', `Uploaded & verified: telemetry, ${data.photos_synced} photos, ${data.events_synced} events`, 'ev-armed');
+    } else if (resp.ok && data.status === 'PARTIAL') {
+      setStatus('Partially Uploaded', 'upload-status-pending');
+      const errs = data.errors ? data.errors.join('; ') : 'Some items skipped';
+      if (detailsEl) detailsEl.textContent = `Partial: ${errs}`;
+      showToast('⚠️ Partial upload completed: ' + errs, 'warning');
+      addLog('UPLOAD_PARTIAL', 'Partial upload: ' + errs, 'ev-grace');
+    } else {
+      setStatus('Upload Failed', 'upload-status-failed');
+      const err = data.errors ? data.errors.join('; ') : (data.detail || 'Upload failed');
+      if (detailsEl) detailsEl.textContent = `Error: ${err}`;
+      showToast('✕ Upload failed: ' + err, 'error');
+      addLog('UPLOAD_ERR', 'Upload failed: ' + err, 'ev-security');
+    }
+  } catch (err) {
+    setStatus('Upload Failed', 'upload-status-failed');
+    if (detailsEl) detailsEl.textContent = `Network error: ${err.message}`;
+    showToast('✕ Network error during upload: ' + err.message, 'error');
+    addLog('UPLOAD_ERR', `Upload network error: ${err.message}`, 'ev-security');
+  } finally {
+    _uploadAllRunning = false;
+    if (btnMain) btnMain.disabled = false;
+    if (btnTab) btnTab.disabled = false;
+  }
+}
+
+/* ── PIN Setup Modal ── */
+let _pinSetupResolve = null;
+function openPinSetupModal() {
+  document.getElementById('setupPin1').value = '';
+  document.getElementById('setupPin2').value = '';
+  document.getElementById('pinSetupError').textContent = '';
+  document.getElementById('pinSetupModal').classList.add('open');
+  document.getElementById('setupPin1').focus();
+  return new Promise(r => { _pinSetupResolve = r; });
+}
+
+function closePinSetupModal() {
+  document.getElementById('pinSetupModal').classList.remove('open');
+  if (_pinSetupResolve) _pinSetupResolve(null);
+}
+
+function confirmPinSetup() {
+  const p1 = document.getElementById('setupPin1').value.trim();
+  const p2 = document.getElementById('setupPin2').value.trim();
+  const errEl = document.getElementById('pinSetupError');
+
+  if (p1.length < 4) {
+    errEl.textContent = 'PIN must be at least 4 characters';
+    return;
+  }
+  if (p1 !== p2) {
+    errEl.textContent = 'PINs do not match';
+    return;
+  }
+  document.getElementById('pinSetupModal').classList.remove('open');
+  if (_pinSetupResolve) _pinSetupResolve(p1);
+}
+
 /* ── Actions ── */
-function doAction(action) {
-  const pin = document.getElementById('quickPin').value || '';
+async function doAction(action) {
+  let pin = document.getElementById('quickPin').value || '';
+
+  if (action === 'arm') {
+    try {
+      const chk = await fetch('/api/auth/pin-status');
+      const st = await chk.json();
+      if (!st.has_pin) {
+        const newPin = await openPinSetupModal();
+        if (!newPin) return; // User cancelled
+        pin = newPin;
+      }
+    } catch (e) {
+      console.warn('PIN check error', e);
+    }
+  }
+
   send({ action, pin });
 }
 

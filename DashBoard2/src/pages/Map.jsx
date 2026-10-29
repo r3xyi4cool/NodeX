@@ -9,6 +9,7 @@ import {
 import { Card } from '../components/Card';
 import { Badge } from '../components/Badge';
 import { getLocations, getLaptops, supabase } from '../lib/supabase';
+import { useData } from '../context/DataContext';
 
 // Fix Leaflet default icon paths in bundlers
 delete L.Icon.Default.prototype._getIconUrl;
@@ -19,6 +20,7 @@ L.Icon.Default.mergeOptions({
 });
 
 export function Map({ onOpenLightbox }) {
+  const { refreshCount, lastRefreshed, refreshData, isRefreshing } = useData();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
@@ -63,7 +65,7 @@ export function Map({ onOpenLightbox }) {
 
   useEffect(() => {
     loadData();
-  }, [selectedLaptopId]);
+  }, [selectedLaptopId, refreshCount]);
 
   // Realtime subscription for incoming location inserts
   useEffect(() => {

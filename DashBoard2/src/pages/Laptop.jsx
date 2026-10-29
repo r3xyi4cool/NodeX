@@ -11,8 +11,10 @@ import { CardSkeleton } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorState } from '../components/ErrorState';
 import { getLaptops, getLatestHeartbeat } from '../lib/supabase';
+import { useData } from '../context/DataContext';
 
 export function Laptop() {
+  const { refreshCount, lastRefreshed, refreshData, isRefreshing } = useData();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [laptops, setLaptops] = useState([]);
@@ -20,7 +22,7 @@ export function Laptop() {
 
   const loadData = async () => {
     try {
-      setLoading(true);
+      if (laptops.length === 0) setLoading(true);
       setError(null);
       const data = await getLaptops();
       setLaptops(data);
@@ -34,7 +36,10 @@ export function Laptop() {
       );
       setHeartbeats(hbMap);
     } catch (err) {
-      setError(err.message || 'Failed to load laptop telemetry');
+      console.warn('Laptop telemetry fetch note:', err);
+      if (laptops.length === 0) {
+        setError(err.message || 'Failed to load laptop telemetry');
+      }
     } finally {
       setLoading(false);
     }
@@ -42,7 +47,7 @@ export function Laptop() {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [refreshCount]);
 
   if (loading) return <div className="space-y-4"><CardSkeleton /><CardSkeleton /></div>;
   if (error) return <ErrorState message={error} onRetry={loadData} />;
@@ -50,14 +55,24 @@ export function Laptop() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h2 className="text-base font-bold text-slate-900 dark:text-white">Registered Laptop Telemetry</h2>
           <p className="text-xs text-slate-500 dark:text-nodex-secondary">Hardware specs, SSD storage, RAM, CPU, GPU, display and live location</p>
         </div>
-        <span className="text-xs font-mono text-cyan-500 bg-cyan-500/10 px-2.5 py-1 rounded-lg border border-cyan-500/20">
-          Values labeled as of last sync
-        </span>
+        <div className="flex items-center gap-3">
+          <div className="text-right text-[11px] font-mono text-slate-400 dark:text-nodex-dim">
+            <div>Cloud Refreshed: <span className="text-cyan-600 dark:text-cyan-400 font-semibold">{lastRefreshed ? lastRefreshed.toLocaleTimeString() : '—'}</span></div>
+          </div>
+          <button
+            onClick={refreshData}
+            disabled={isRefreshing}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-nodex-border bg-white dark:bg-nodex-card text-xs font-mono text-slate-600 dark:text-nodex-secondary hover:text-cyan-500 transition-colors disabled:opacity-50"
+          >
+            <Zap className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-cyan-500' : ''}`} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-6">

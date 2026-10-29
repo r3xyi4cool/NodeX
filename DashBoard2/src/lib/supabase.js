@@ -237,3 +237,112 @@ export async function getLocations({ limit = 150, laptopId } = {}) {
   return results;
 }
 
+
+
+export async function checkSupabaseConnectivity() {
+  if (!isConfigured) {
+    return {
+      ok: false,
+      status: 'FAILED',
+      category: 'CONFIG_ERROR',
+      title: 'Configuration Missing',
+      message: 'Supabase URL or Anonymous API Key is missing in environment variables.',
+    };
+  }
+
+  // 1. Query test on laptops table
+  try {
+    const { data, error } = await supabase.from('laptops').select('id').limit(1);
+    if (error) {
+      const errStr = (error.message || '').toLowerCase();
+      const code = String(error.code || '');
+
+      if (code === '42501' || errStr.includes('permission denied') || errStr.includes('row-level security') || errStr.includes('rls')) {
+        return {
+          ok: false,
+          status: 'FAILED',
+          category: 'PERMISSION_ERROR',
+          title: 'Permission / RLS Error',
+          message: 'Access denied by Supabase Row Level Security policy for the database tables.',
+        };
+      }
+      if (code === 'PGRST301' || errStr.includes('jwt') || errStr.includes('unauthorized') || errStr.includes('api key') || error.status === 401 || error.status === 403) {
+        return {
+          ok: false,
+          status: 'FAILED',
+          category: 'AUTH_ERROR',
+          title: 'Authentication / Key Error',
+          message: 'Invalid Supabase API key or expired credentials. Check project settings.',
+        };
+      }
+      if (errStr.includes('relation') && errStr.includes('does not exist')) {
+        return {
+          ok: false,
+          status: 'FAILED',
+          category: 'QUERY_ERROR',
+          title: 'Schema Query Error',
+          message: 'The required database table "laptops" does not exist in this Supabase schema.',
+        };
+      }
+      return {
+        ok: false,
+        status: 'FAILED',
+        category: 'QUERY_ERROR',
+        title: 'Database Query Error',
+        message: 'Database query failed: ' + (error.message || 'Unknown database error'),
+      };
+    }
+  } catch (err) {
+    const errStr = (err.message || '').toLowerCase();
+    if (errStr.includes('failed to fetch') || errStr.includes('networkerror') || errStr.includes('network') || errStr.includes('dns') || errStr.includes('load failed')) {
+      return {
+        ok: false,
+        status: 'FAILED',
+        category: 'NETWORK_ERROR',
+        title: 'Network Unreachable',
+        message: 'Unable to connect to Supabase servers. Please check your internet connection or project URL.',
+      };
+    }
+    return {
+      ok: false,
+      status: 'FAILED',
+      category: 'NETWORK_ERROR',
+      title: 'Connection Error',
+      message: 'Network connection failed: ' + (err.message || 'Unknown network error'),
+    };
+  }
+
+  // 2. Storage bucket accessibility test
+  try {
+    const { data: buckets, error: storageErr } = await supabase.storage.listBuckets();
+    if (storageErr) {
+      return {
+        ok: false,
+        status: 'FAILED',
+        category: 'STORAGE_ERROR',
+        title: 'Storage Access Error',
+        message: 'Could not access Supabase Storage: ' + (storageErr.message || 'Permission denied'),
+      };
+    }
+    const hasSecBucket = buckets && buckets.some((b) => b.name === 'security-images' || b.name === 'intruder-captures');
+    if (!hasSecBucket) {
+      return {
+        ok: false,
+        status: 'FAILED',
+        category: 'STORAGE_ERROR',
+        title: 'Storage Bucket Missing',
+        message: 'Storage bucket "security-images" was not found in this Supabase project.',
+      };
+    }
+  } catch (stErr) {
+    console.debug('Storage check note:', stErr);
+  }
+
+  return {
+    ok: true,
+    status: 'CONNECTED',
+    category: 'CONNECTED',
+    title: 'Supabase Connected',
+    message: 'Supabase Database and Storage connection verified.',
+  };
+}

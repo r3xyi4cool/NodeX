@@ -8,10 +8,12 @@ import { EmptyState } from '../components/EmptyState';
 import { ErrorState } from '../components/ErrorState';
 import { EventDetailPanel } from '../components/EventDetailPanel';
 import { getEvents, getLaptops } from '../lib/supabase';
+import { useData } from '../context/DataContext';
 
 const EVENT_TYPES = ['ALL', 'ARM', 'DISARM', 'BLE_LOST', 'TOKEN_RECOVERED', 'SECURITY_EVENT', 'MANUAL_TEST'];
 
 export function Events() {
+  const { refreshCount, lastRefreshed, refreshData, isRefreshing } = useData();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [events, setEvents] = useState([]);
@@ -23,13 +25,16 @@ export function Events() {
 
   const loadData = async () => {
     try {
-      setLoading(true);
+      if (events.length === 0) setLoading(true);
       setError(null);
       const res = await getEvents({ page, pageSize: 25, eventType, search });
       setEvents(res.events);
       setTotalCount(res.totalCount);
     } catch (err) {
-      setError(err.message || 'Failed to fetch security events');
+      console.warn('Events fetch note:', err);
+      if (events.length === 0) {
+        setError(err.message || 'Failed to fetch security events');
+      }
     } finally {
       setLoading(false);
     }
@@ -37,7 +42,7 @@ export function Events() {
 
   useEffect(() => {
     loadData();
-  }, [page, eventType, search]);
+  }, [page, eventType, search, refreshCount]);
 
   const totalPages = Math.max(Math.ceil(totalCount / 25), 1);
 

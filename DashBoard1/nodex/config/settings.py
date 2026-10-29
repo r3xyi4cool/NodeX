@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import platform
+import secrets
 import socket
 import subprocess
 import uuid
@@ -48,7 +49,6 @@ _DEFAULTS: dict = {
     "paired_device_name": None,
     "paired_device_firmware": None,
     "laptop_id": None,          # set on first-run registration
-    "arm_pin_hash": None,       # sha256 hex of the PIN
     "mock_ble": False,
     "telegram_chat_id": None,
     "camera_enabled": True,
@@ -64,8 +64,11 @@ class Settings:
     Backed by nodex_config.json; env vars are for secrets only.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, path: Optional[Path] = None) -> None:
+        self._config_file = path or CONFIG_FILE
         self._data: dict = dict(_DEFAULTS)
+        self._session_pin_salt: Optional[str] = None
+        self._session_pin_hash: Optional[str] = None
         self._load()
 
     # ------------------------------------------------------------------
@@ -73,16 +76,18 @@ class Settings:
     # ------------------------------------------------------------------
 
     def _load(self) -> None:
-        if CONFIG_FILE.exists():
+        if self._config_file.exists():
             try:
-                saved = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+                saved = json.loads(self._config_file.read_text(encoding="utf-8"))
+                saved.pop("arm_pin_hash", None)  # PIN must NEVER persist across app restarts
                 self._data.update(saved)
             except (json.JSONDecodeError, OSError):
                 pass  # corrupt file — start from defaults
 
     def save(self) -> None:
-        CONFIG_FILE.write_text(
-            json.dumps(self._data, indent=2, ensure_ascii=False),
+        to_save = {k: v for k, v in self._data.items() if k != "arm_pin_hash"}
+        self._config_file.write_text(
+            json.dumps(to_save, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
 
@@ -167,12 +172,17 @@ class Settings:
 
     @property
     def arm_pin_hash(self) -> Optional[str]:
-        return self._data.get("arm_pin_hash")
+        """In-memory session-only PIN hash. Never persisted to disk."""
+        return self._session_pin_hash
 
     @arm_pin_hash.setter
     def arm_pin_hash(self, v: Optional[str]) -> None:
-        self._data["arm_pin_hash"] = v
-        self.save()
+        """Set session-only PIN hash directly (for tests)."""
+        if v is None:
+            self.clear_pin()
+        else:
+            self._session_pin_salt = ""
+            self._session_pin_hash = v
 
     @property
     def mock_ble(self) -> bool:
@@ -234,18 +244,43 @@ class Settings:
         return current
 
     # ------------------------------------------------------------------
-    # PIN helpers
+    # PIN helpers (Session-only, salted, in-memory)
     # ------------------------------------------------------------------
 
+    def has_pin(self) -> bool:
+        """Return True if a PIN has been configured during the current application session."""
+        return self._session_pin_hash is not None
+
     def set_pin(self, raw_pin: str) -> None:
-        """Hash and store a new PIN."""
-        self.arm_pin_hash = hashlib.sha256(raw_pin.encode()).hexdigest()
+        """Salt and hash a new PIN in session-only memory. Never saved to disk."""
+        clean_pin = str(raw_pin).strip()
+        if not clean_pin:
+            raise ValueError("PIN cannot be empty")
+        salt = secrets.token_hex(16)
+        self._session_pin_salt = salt
+        self._session_pin_hash = hashlib.sha256((salt + clean_pin).encode()).hexdigest()
 
     def verify_pin(self, raw_pin: str) -> bool:
-        """Return True if raw_pin matches the stored hash."""
-        if not self.arm_pin_hash:
-            return True  # no PIN set → open
-        return hashlib.sha256(raw_pin.encode()).hexdigest() == self.arm_pin_hash
+        """
+        Verify raw_pin against session PIN hash.
+        Returns True if matched, False if mismatch or empty.
+        If no PIN is configured in this session, returns True for backward-compatibility.
+        """
+        if not self.has_pin():
+            return True  # no PIN configured in this session
+        clean_pin = str(raw_pin).strip() if raw_pin else ""
+        if not clean_pin:
+            return False
+        salt = self._session_pin_salt or ""
+        if not salt:
+            # Fallback for direct unsalted hash injection (unit tests)
+            return hashlib.sha256(clean_pin.encode()).hexdigest() == self._session_pin_hash
+        return hashlib.sha256((salt + clean_pin).encode()).hexdigest() == self._session_pin_hash
+
+    def clear_pin(self) -> None:
+        """Clear all session PIN information on application shutdown or reset."""
+        self._session_pin_salt = None
+        self._session_pin_hash = None
 
     # ------------------------------------------------------------------
     # Secrets (from env / Credential Manager via keyring)

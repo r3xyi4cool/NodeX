@@ -141,6 +141,41 @@ class NodeXApp:
         # Wire TelegramAlert
         self.alerts.register(TelegramAlert(self.queue))
 
+        # Wire disconnection incident handler
+        ui_on_incident = getattr(self.monitor, "on_disconnection_incident", None)
+
+        async def _handle_disconnect_incident(incident: dict):
+            logger.info("Handling disconnection incident %s", incident.get("incident_id"))
+            # Trigger emergency snap
+            photo_bytes = None
+            try:
+                snap = await self.camera.capture_next()
+                if snap:
+                    photo_bytes = snap.get("bytes") if isinstance(snap, dict) else getattr(snap, "jpeg_bytes", None)
+            except Exception as e:
+                logger.warning("Emergency photo capture error: %s", e)
+
+            # Background upload incident to Supabase
+            try:
+                await self.sync.upload_incident(incident, photo_bytes=photo_bytes)
+            except Exception as e:
+                logger.error("Incident upload failure: %s", e)
+
+        def _on_incident_callback(incident: dict):
+            if ui_on_incident:
+                try:
+                    ui_on_incident(incident)
+                except Exception as e:
+                    logger.debug("UI on_incident error: %s", e)
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    loop.create_task(_handle_disconnect_incident(incident))
+            except RuntimeError:
+                pass
+
+        self.monitor.on_disconnection_incident = _on_incident_callback
+
     async def _start_async(self) -> None:
         logger.info("Starting NodeX Dashboard 1...")
 

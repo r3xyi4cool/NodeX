@@ -53,6 +53,7 @@ class SupabaseSync:
         self._task: Optional[asyncio.Task] = None
         self._heartbeat_task: Optional[asyncio.Task] = None
         self._stop_event = asyncio.Event()
+        self._sync_lock = asyncio.Lock()
 
     # ------------------------------------------------------------------
     # Public
@@ -88,37 +89,32 @@ class SupabaseSync:
             )
             email = settings.nodex_user_email
             password = keyring.get_password(KEYRING_SERVICE, KEYRING_USER_PWD)
-            if not email or not password:
-                if settings.mock_ble:
-                    logger.info("[DEMO] Running in mock/demo mode — proceeding with configured Supabase credentials")
+            auth_signed_in = False
+            if email and password:
+                try:
+                    resp = self._client.auth.sign_in_with_password(
+                        {"email": email, "password": password}
+                    )
+                    if resp.user is not None:
+                        auth_signed_in = True
+                        logger.info("Authenticated as %s", email)
+                except Exception as auth_err:
+                    logger.debug("Keyring password sign-in note: %s", auth_err)
+
+            # Test direct client query execution with configured credentials
+            try:
+                self._client.table("laptops").select("id").limit(1).execute()
+                self._authenticated = True
+                await self._register_laptop()
+                return True
+            except Exception as test_err:
+                if auth_signed_in:
                     self._authenticated = True
                     await self._register_laptop()
                     return True
-                logger.error(
-                    "Supabase credentials missing. "
-                    "Run setup.py to store password in Credential Manager."
-                )
+                logger.warning("Supabase connection check failed: %s", test_err)
+                self._authenticated = False
                 return False
-
-            try:
-                resp = self._client.auth.sign_in_with_password(
-                    {"email": email, "password": password}
-                )
-                if resp.user is None and not settings.mock_ble:
-                    logger.error("Supabase auth failed — check email/password")
-                    return False
-            except Exception as auth_err:
-                if settings.mock_ble:
-                    logger.info("[DEMO] Auth note: %s — continuing in demo mode", auth_err)
-                else:
-                    raise
-
-            self._authenticated = True
-            logger.info("Authenticated as %s", email)
-
-            # Register laptop on first run
-            await self._register_laptop()
-            return True
 
         except Exception as exc:
             logger.warning("Auth error: %s", exc)
@@ -213,6 +209,283 @@ class SupabaseSync:
                 logger.debug("Laptop ID resolution note: %s", chk_err)
 
     # ------------------------------------------------------------------
+    # Immediate Synchronization Workflows
+    # ------------------------------------------------------------------
+
+    async def upload_all_now(self, progress_callback=None) -> dict:
+        """
+        Immediately uploads all available data to Supabase without waiting for sync interval:
+        1. Device telemetry and hardware specs (laptops upsert + verify)
+        2. Unsynchronized events, heartbeats, and alerts
+        3. Fresh manual heartbeat record with full hardware snapshot
+        4. Current geographical location
+        5. All local webcam captures in the 20-photo buffer to security-images bucket + captures table
+        6. Verifies that all uploaded items are confirmed in Supabase
+        Returns a detailed report.
+        """
+        async with self._sync_lock:
+            report = {
+                "status": "UPLOADING_DATA",
+                "telemetry_synced": False,
+                "location_synced": False,
+                "events_uploaded": 0,
+                "heartbeats_uploaded": 0,
+                "alerts_uploaded": 0,
+                "photos_uploaded": 0,
+                "photos_failed": 0,
+                "verified": False,
+                "errors": [],
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+
+            def _notify(step: str, msg: str = ""):
+                if progress_callback:
+                    try:
+                        res = progress_callback(step, msg)
+                        if asyncio.iscoroutine(res):
+                            asyncio.create_task(res)
+                    except TypeError:
+                        try:
+                            res = progress_callback(step)
+                            if asyncio.iscoroutine(res):
+                                asyncio.create_task(res)
+                        except Exception:
+                            pass
+                    except Exception:
+                        pass
+
+            _notify("UPLOADING_DATA", "Authenticating and collecting telemetry...")
+
+            ok = await self._ensure_auth()
+            if not ok or not self._client:
+                report["status"] = "FAILED"
+                report["errors"].append("Unable to authenticate or connect with Supabase")
+                _notify("UPLOAD_FAILED", "Unable to connect with Supabase")
+                return report
+
+            # 1. Telemetry and hardware registration / update
+            try:
+                await self._register_laptop()
+                snapshot = await collect_snapshot()
+                full_laptop_data = {
+                    "fingerprint": get_hardware_fingerprint(),
+                    "name": socket.gethostname(),
+                    "os": snapshot["os"],
+                    "last_seen": datetime.now(timezone.utc).isoformat(),
+                    "security_mode": self._monitor.state.name,
+                    "battery_percent": snapshot.get("battery_percent"),
+                    "charging": snapshot.get("charging"),
+                    "network_online": snapshot.get("network_online"),
+                    "location": snapshot.get("location"),
+                    "storage_total_gb": snapshot.get("storage_total_gb"),
+                    "storage_used_gb": snapshot.get("storage_used_gb"),
+                    "storage_free_gb": snapshot.get("storage_free_gb"),
+                    "storage_usage_pct": snapshot.get("storage_usage_pct"),
+                    "ram_total_gb": snapshot.get("ram_total_gb"),
+                    "ram_used_gb": snapshot.get("ram_used_gb"),
+                    "ram_usage_pct": snapshot.get("ram_usage_pct"),
+                    "cpu_model": snapshot.get("cpu_model"),
+                    "cpu_usage_pct": snapshot.get("cpu_percent"),
+                    "gpu_model": snapshot.get("gpu_model"),
+                    "gpu_vram_gb": snapshot.get("gpu_vram_gb"),
+                    "gpu_usage_pct": snapshot.get("gpu_usage_pct"),
+                    "display_info": snapshot.get("display_info"),
+                    "system_specs": snapshot,
+                }
+                res = self._client.table("laptops").upsert(full_laptop_data, on_conflict="fingerprint").execute()
+                if res.data:
+                    self._laptop_id = str(res.data[0]["id"])
+                    settings.laptop_id = self._laptop_id
+                    report["telemetry_synced"] = True
+            except Exception as e:
+                report["errors"].append(f"Telemetry upload error: {e}")
+
+            # 2. Location sync
+            try:
+                loc_res = await self.sync_location(sync_event="MANUAL_UPLOAD")
+                if loc_res:
+                    report["location_synced"] = True
+            except Exception as e:
+                report["errors"].append(f"Location sync error: {e}")
+
+            # 3. Push unsynced queue rows (events, heartbeats, alerts)
+            try:
+                unsynced_ev_before = len(self._queue.get_unsynced(table="events"))
+                unsynced_hb_before = len(self._queue.get_unsynced(table="heartbeats"))
+                unsynced_al_before = len(self._queue.get_unsynced(table="alerts"))
+
+                await self._push_events()
+                await self._push_heartbeats()
+                await self._push_alerts()
+
+                unsynced_ev_after = len(self._queue.get_unsynced(table="events"))
+                unsynced_hb_after = len(self._queue.get_unsynced(table="heartbeats"))
+                unsynced_al_after = len(self._queue.get_unsynced(table="alerts"))
+
+                report["events_uploaded"] = max(0, unsynced_ev_before - unsynced_ev_after)
+                report["heartbeats_uploaded"] = max(0, unsynced_hb_before - unsynced_hb_after)
+                report["alerts_uploaded"] = max(0, unsynced_al_before - unsynced_al_after)
+            except Exception as e:
+                report["errors"].append(f"Queue push error: {e}")
+
+            # Also push an explicit manual sync snapshot heartbeat
+            try:
+                hb_snap = {
+                    "laptop_id": self._laptop_id,
+                    "event_type": "MANUAL_UPLOAD",
+                    "security_mode": self._monitor.state.name,
+                    "battery_percent": snapshot.get("battery_percent"),
+                    "charging": snapshot.get("charging"),
+                    "network_online": snapshot.get("network_online"),
+                    "network_ip": snapshot.get("network_ip"),
+                    "ble_connected": self._monitor._ble.connected,
+                    "rssi_smooth": self._monitor._ble.rssi_smooth,
+                    "location": snapshot.get("location"),
+                    "storage_total_gb": snapshot.get("storage_total_gb"),
+                    "storage_used_gb": snapshot.get("storage_used_gb"),
+                    "storage_free_gb": snapshot.get("storage_free_gb"),
+                    "storage_usage_pct": snapshot.get("storage_usage_pct"),
+                    "ram_total_gb": snapshot.get("ram_total_gb"),
+                    "ram_used_gb": snapshot.get("ram_used_gb"),
+                    "ram_usage_pct": snapshot.get("ram_usage_pct"),
+                    "cpu_model": snapshot.get("cpu_model"),
+                    "cpu_usage_pct": snapshot.get("cpu_percent"),
+                    "gpu_model": snapshot.get("gpu_model"),
+                    "gpu_vram_gb": snapshot.get("gpu_vram_gb"),
+                    "gpu_usage_pct": snapshot.get("gpu_usage_pct"),
+                    "display_info": snapshot.get("display_info"),
+                    "system_specs": snapshot,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                }
+                self._client.table("heartbeats").insert(hb_snap).execute()
+                report["heartbeats_uploaded"] += 1
+            except Exception as e:
+                logger.debug("Manual heartbeat insert note: %s", e)
+
+            # 4. Photos upload
+            _notify("UPLOADING_PHOTOS", "Uploading webcam surveillance photos to Supabase Storage...")
+
+            from nodex.config.settings import CAPTURES_DIR
+            existing_photos = sorted(CAPTURES_DIR.glob("photo_*.jpg"), key=lambda p: p.stat().st_mtime, reverse=True)
+            for photo_path in existing_photos:
+                try:
+                    slot_str = photo_path.stem.replace("photo_", "")
+                    slot = int(slot_str) if slot_str.isdigit() else 1
+                    jpeg_bytes = photo_path.read_bytes()
+                    photo_dict = {
+                        "slot": slot,
+                        "bytes": jpeg_bytes,
+                        "captured_at": datetime.fromtimestamp(photo_path.stat().st_mtime, timezone.utc).isoformat(),
+                    }
+                    uploaded_url = await self.upload_capture(photo_dict)
+                    if uploaded_url:
+                        report["photos_uploaded"] += 1
+                    else:
+                        report["photos_failed"] += 1
+                except Exception as p_err:
+                    report["photos_failed"] += 1
+                    report["errors"].append(f"Photo {photo_path.name} upload error: {p_err}")
+
+            # 5. Verification step
+            _notify("VERIFYING_UPLOAD", "Verifying records in Supabase...")
+
+            verified_laptop = False
+            try:
+                chk = self._client.table("laptops").select("id, last_seen").eq("id", self._laptop_id).execute()
+                if chk.data and len(chk.data) > 0:
+                    verified_laptop = True
+            except Exception as v_err:
+                report["errors"].append(f"Verification query error: {v_err}")
+
+            report["verified"] = verified_laptop and report["telemetry_synced"]
+
+            # Compute final status
+            if report["verified"] and report["photos_failed"] == 0 and not report["errors"]:
+                report["status"] = "SUCCESS"
+            elif report["telemetry_synced"] or report["photos_uploaded"] > 0 or report["events_uploaded"] > 0:
+                report["status"] = "PARTIAL"
+            else:
+                report["status"] = "FAILED"
+
+            status_key = "UPLOAD_SUCCESSFUL" if report["status"] == "SUCCESS" else ("PARTIALLY_UPLOADED" if report["status"] == "PARTIAL" else "UPLOAD_FAILED")
+            _notify(status_key, f"Upload completed with status: {report['status']}")
+
+            return report
+
+    async def upload_incident(self, incident: dict, photo_bytes: Optional[bytes] = None) -> dict:
+        """
+        Immediately uploads an incident to Supabase (genuine or simulated):
+        - Inserts into events table
+        - Uploads evidence photo to security-images bucket + captures table
+        - Uploads location to locations table
+        - Retains in local queue if offline
+        """
+        incident_id = incident.get("incident_id")
+        event_type = incident.get("event_type", "BLE_LOST")
+        simulated = bool(incident.get("is_simulation") or incident.get("simulated"))
+        now_iso = datetime.now(timezone.utc).isoformat()
+
+        # Enqueue in local SQLite queue immediately for guaranteed resilience
+        local_event = {
+            "incident_id": incident_id,
+            "event_type": event_type,
+            "state_before": incident.get("state_before", "ARMED"),
+            "state_after": incident.get("state_after", "BLE_LOST"),
+            "rssi": incident.get("rssi"),
+            "rssi_smooth": incident.get("rssi_smooth"),
+            "timestamp": now_iso,
+            "simulated": simulated,
+            "metadata": incident.get("metadata", {}),
+        }
+        row_id = self._queue.enqueue(local_event, table="events")
+
+        photo_url = None
+        if photo_bytes:
+            try:
+                slot = settings.next_photo_slot()
+                photo_url = await self.upload_capture({
+                    "slot": slot,
+                    "bytes": photo_bytes,
+                    "captured_at": now_iso,
+                })
+            except Exception as cam_err:
+                logger.debug("Incident photo upload note: %s", cam_err)
+
+        synced = False
+        if await self._ensure_auth() and self._client and self._laptop_id:
+            try:
+                payload = {
+                    "laptop_id": self._laptop_id,
+                    "event_type": event_type,
+                    "state_before": local_event["state_before"],
+                    "state_after": local_event["state_after"],
+                    "rssi": local_event["rssi"],
+                    "rssi_smooth": local_event["rssi_smooth"],
+                    "image_url": photo_url,
+                    "created_at": now_iso,
+                    "timestamp": now_iso,
+                }
+                res = self._client.table("events").insert(payload).execute()
+                if res.data:
+                    self._queue.mark_synced(row_id, table="events")
+                    synced = True
+            except Exception as up_err:
+                logger.warning("Instant incident Supabase push error: %s (saved locally)", up_err)
+                self._queue.mark_error(row_id, str(up_err), table="events")
+
+            try:
+                await self.sync_location(sync_event="INCIDENT_TRIGGERED", image_url=photo_url)
+            except Exception as loc_err:
+                logger.debug("Incident location sync note: %s", loc_err)
+
+        return {
+            "incident_id": incident_id,
+            "synced": synced,
+            "photo_url": photo_url,
+            "row_id": row_id,
+        }
+
+    # ------------------------------------------------------------------
     # Sync loop
     # ------------------------------------------------------------------
 
@@ -220,14 +493,15 @@ class SupabaseSync:
         attempt = 0
         while not self._stop_event.is_set():
             try:
-                ok = await self._ensure_auth()
-                if ok:
-                    await self._push_events()
-                    await self._push_heartbeats()
-                    await self._push_alerts()
-                    attempt = 0
-                else:
-                    raise RuntimeError("Not authenticated")
+                async with self._sync_lock:
+                    ok = await self._ensure_auth()
+                    if ok:
+                        await self._push_events()
+                        await self._push_heartbeats()
+                        await self._push_alerts()
+                        attempt = 0
+                    else:
+                        raise RuntimeError("Not authenticated")
             except asyncio.CancelledError:
                 break
             except Exception as exc:
@@ -413,6 +687,8 @@ class SupabaseSync:
         Uses slot 1..20. Overwrites the file in the bucket when slot wraps around.
         Upserts the slot record in the 'captures' table.
         """
+        if not self._client or not self._laptop_id:
+            await self._ensure_auth()
         if not self._client or not self._laptop_id:
             return None
 

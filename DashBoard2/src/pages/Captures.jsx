@@ -5,8 +5,10 @@ import { Skeleton } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorState } from '../components/ErrorState';
 import { getCaptures, getSignedPhotoUrl } from '../lib/supabase';
+import { useData } from '../context/DataContext';
 
 export function Captures({ onOpenLightbox }) {
+  const { refreshCount, lastRefreshed, refreshData, isRefreshing } = useData();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [captures, setCaptures] = useState([]);
@@ -14,7 +16,7 @@ export function Captures({ onOpenLightbox }) {
 
   const loadData = async () => {
     try {
-      setLoading(true);
+      if (captures.length === 0) setLoading(true);
       setError(null);
       const raw = await getCaptures({ limit: 20 });
       const signed = await Promise.all(
@@ -25,7 +27,10 @@ export function Captures({ onOpenLightbox }) {
       );
       setCaptures(signed);
     } catch (err) {
-      setError(err.message || 'Failed to load surveillance captures');
+      console.warn('Captures fetch note:', err);
+      if (captures.length === 0) {
+        setError(err.message || 'Failed to load surveillance captures');
+      }
     } finally {
       setLoading(false);
     }
@@ -33,7 +38,7 @@ export function Captures({ onOpenLightbox }) {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [refreshCount]);
 
   const filtered = filterMode === 'ALL' ? captures : captures.filter((c) => c.security_mode === filterMode);
 

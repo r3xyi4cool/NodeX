@@ -61,6 +61,10 @@ class NodeXUIServer:
 
         # Wire monitor broadcasts to WebSocket
         self._monitor.on_state_change = self._on_status_update
+        self._monitor.on_disconnection_incident = self._on_disconnection_incident
+        self._monitor.on_reconnected = self._on_reconnected
+        self._monitor.on_simulation_ended = self._on_simulation_ended
+        self._monitor.on_alert_silenced = self._on_alert_silenced
 
     # ------------------------------------------------------------------
     # FastAPI app
@@ -113,18 +117,36 @@ class NodeXUIServer:
         async def api_status():
             return JSONResponse(self._build_full_status())
 
+        @app.get("/api/auth/pin-status")
+        async def api_pin_status():
+            return {"has_pin": settings.has_pin()}
+
+        @app.post("/api/auth/set-pin")
+        async def api_set_pin(body: dict = {}):
+            pin = body.get("pin", "")
+            if not pin or len(str(pin).strip()) < 4:
+                raise HTTPException(status_code=400, detail="PIN must be at least 4 digits/characters")
+            settings.set_pin(str(pin).strip())
+            return {"ok": True, "has_pin": True}
+
         @app.post("/api/arm")
         async def api_arm(body: dict = {}):
             pin = body.get("pin", "")
-            if not settings.verify_pin(pin):
-                raise HTTPException(status_code=403, detail="Invalid PIN")
+            if not settings.has_pin():
+                new_pin = body.get("new_pin", "") or pin
+                if not new_pin or len(str(new_pin).strip()) < 4:
+                    raise HTTPException(status_code=400, detail="A session PIN (at least 4 characters) is required to arm.")
+                settings.set_pin(str(new_pin).strip())
+            else:
+                if not settings.verify_pin(pin):
+                    raise HTTPException(status_code=403, detail="Invalid PIN")
             self._monitor.arm()
-            return {"ok": True, "state": self._monitor.state.name}
+            return {"ok": True, "state": self._monitor.state.name, "has_pin": True}
 
         @app.post("/api/disarm")
         async def api_disarm(body: dict = {}):
             pin = body.get("pin", "")
-            if not settings.verify_pin(pin):
+            if settings.has_pin() and not settings.verify_pin(pin):
                 raise HTTPException(status_code=403, detail="Invalid PIN")
             self._monitor.disarm()
             return {"ok": True, "state": self._monitor.state.name}
@@ -132,10 +154,39 @@ class NodeXUIServer:
         @app.post("/api/test")
         async def api_test(body: dict = {}):
             pin = body.get("pin", "")
-            if not settings.verify_pin(pin):
+            if settings.has_pin() and not settings.verify_pin(pin):
                 raise HTTPException(status_code=403, detail="Invalid PIN")
             self._monitor.manual_test()
             return {"ok": True}
+
+        @app.post("/api/alert/silence")
+        async def api_silence_alert(body: dict = {}):
+            pin = body.get("pin", "")
+            if settings.has_pin() and not settings.verify_pin(pin):
+                raise HTTPException(status_code=403, detail="Invalid PIN")
+            silenced = self._monitor.silence_alert()
+            return {"ok": True, "silenced": silenced, "alert_active": self._monitor.alert_active}
+
+        @app.post("/api/demo/simulate-disconnect")
+        async def api_simulate_disconnect():
+            incident = self._monitor.simulate_disconnection()
+            return {"ok": True, "incident": incident}
+
+        @app.post("/api/demo/end-simulation")
+        async def api_end_simulation():
+            ended = self._monitor.end_simulation()
+            return {"ok": True, "ended": ended}
+
+        @app.post("/api/sync/upload-all")
+        async def api_upload_all():
+            if not self._sync or not hasattr(self._sync, "upload_all_now"):
+                raise HTTPException(status_code=503, detail="Sync engine unavailable")
+
+            async def _progress_callback(status_text: str):
+                await self.broadcast({"type": "upload_progress", "status": status_text})
+
+            result = await self._sync.upload_all_now(progress_callback=_progress_callback)
+            return result
 
         @app.post("/api/pair/scan")
         async def api_scan():
@@ -270,6 +321,18 @@ class NodeXUIServer:
             else:
                 await ws.send_json({"type": "error", "detail": "Invalid PIN"})
 
+        elif action == "silence_alert":
+            if settings.has_pin() and not settings.verify_pin(pin):
+                await ws.send_json({"type": "error", "detail": "Invalid PIN to silence alert"})
+            else:
+                self._monitor.silence_alert()
+
+        elif action == "simulate_disconnect":
+            self._monitor.simulate_disconnection()
+
+        elif action == "end_simulation":
+            self._monitor.end_simulation()
+
         elif action == "ping":
             await ws.send_json({"type": "pong"})
 
@@ -291,6 +354,42 @@ class NodeXUIServer:
             loop = asyncio.get_event_loop()
             if loop.is_running():
                 loop.create_task(self.broadcast(status))
+        except RuntimeError:
+            pass
+
+    def _on_disconnection_incident(self, incident: dict) -> None:
+        """Called by monitor when a connection lost incident occurs."""
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                loop.create_task(self.broadcast({"type": "disconnection_incident", "incident": incident}))
+        except RuntimeError:
+            pass
+
+    def _on_reconnected(self, beacon_info: dict) -> None:
+        """Called by monitor when genuine beacon connection is recovered."""
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                loop.create_task(self.broadcast({"type": "reconnected", "beacon": beacon_info}))
+        except RuntimeError:
+            pass
+
+    def _on_simulation_ended(self) -> None:
+        """Called by monitor when disconnection simulation ends."""
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                loop.create_task(self.broadcast({"type": "simulation_ended"}))
+        except RuntimeError:
+            pass
+
+    def _on_alert_silenced(self) -> None:
+        """Called by monitor when an alert is silenced with PIN."""
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                loop.create_task(self.broadcast({"type": "alert_silenced"}))
         except RuntimeError:
             pass
 
@@ -319,6 +418,12 @@ class NodeXUIServer:
             "camera_enabled": settings.camera_enabled,
             "camera_current_slot": settings.camera_current_slot,
             "camera_max_photos": settings.camera_max_photos,
+            "alert_active": getattr(self._monitor, "alert_active", False),
+            "simulation_active": getattr(self._monitor, "simulation_active", False),
+            "active_incident_id": getattr(self._monitor, "active_incident_id", None),
+            "simulated_incident_id": getattr(self._monitor, "simulated_incident_id", None),
+            "last_incident_time": getattr(self._monitor, "last_incident_time", None),
+            "has_pin": settings.has_pin(),
         }
 
     def _get_settings_dict(self) -> dict:
@@ -332,7 +437,7 @@ class NodeXUIServer:
             "camera_interval_seconds": settings.camera_interval_seconds,
             "camera_max_photos": settings.camera_max_photos,
             "camera_current_slot": settings.camera_current_slot,
-            "has_pin": settings.arm_pin_hash is not None,
+            "has_pin": settings.has_pin(),
             "ui_port": settings.ui_port,
         }
 
